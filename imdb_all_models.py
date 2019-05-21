@@ -26,7 +26,7 @@ In this example we only need torchvision package, assuming that `torch` and `ign
 `python -m spacy download en`
 """
 
-pip install pytorch-ignite
+# pip install pytorch-ignite
 
 """## Import Libraries"""
 
@@ -81,6 +81,7 @@ Next IMDB training and test datasets are downloaded, the training data is split 
 """
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 
 TEXT = data.Field(lower=True, fix_length=400)
 LABEL = data.LabelField(dtype=torch.float)

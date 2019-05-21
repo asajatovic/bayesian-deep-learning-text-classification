@@ -9,10 +9,10 @@ dependencies:
   - ipython
   - jupyter
   - notebook
-  - python
-  - pytorch=3.6
+  - pip
+  - python=3.6
+  - pytorch
   - spacy
   - torchvision
   - pip:
-    - en-core-web-sm
     - torchtext

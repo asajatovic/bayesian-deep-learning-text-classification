@@ -1,0 +1,18 @@
+name: bayesian_nn
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=10.0
+  - ignite
+  - ipython
+  - jupyter
+  - notebook
+  - python
+  - pytorch=3.6
+  - spacy
+  - torchvision
+  - pip:
+    - en-core-web-sm
+    - torchtext

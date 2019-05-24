@@ -141,7 +141,7 @@ print ('Shape of LABEL.vocab.vectors : ', LABEL.vocab.vectors)
 """Now we must convert our split datasets into iterators, we'll take advantage of **torchtext.data.BucketIterator**! BucketIterator pads every element of a batch to the length of the longest element of the batch."""
 
 train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits((train_data, valid_data, test_data), 
-                                                                           batch_size=32,
+                                                                           batch_size=32*1,
                                                                            device=device)
 
 """Let's actually explore what the output of the iterator is, this way we'll know what the input of the model is, how to compare the label to the output and how to setup are process_functions for Ignite's `Engine`.
@@ -317,8 +317,8 @@ class TextTCN(nn.Module):
 
     def forward(self, x):
         sequence_length, batch_size = x.shape
-        x = self.embedding(x).transpose(1, 2)
-        x = self.tcn(x)
+        x = self.embedding(x.transpose(0, 1))
+        x = self.tcn(x.transpose(1,2))
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1) # global max pool
         x = self.fc(self.dropout(x))
         return self.activation(x).squeeze()
@@ -337,11 +337,48 @@ class TextTCN(nn.Module):
         else:
             raise ValueError('Unexpected value of mode. Please choose from static, nonstatic, rand.')
 
+class MyGRUCell(nn.Module):
+
+    __constants__ = ['input2hidden, hidden2hidden']
+
+    def __init__(self, input_size, hidden_size, bias=True):
+        super(MyGRUCell, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.input2hidden = nn.Linear(input_size, hidden_size * 3, bias)
+        self.hidden2hidden = nn.Linear(hidden_size, hidden_size * 3, bias)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        import math
+        stdv = 1.0 / math.sqrt(self.hidden_size)
+        for weight in self.parameters():
+            nn.init.uniform_(weight, -stdv, stdv)
+
+    def forward(self, input, state=None):
+        #input = input.view(-1, input.size(1))
+        gate_input = self.input2hidden(input).squeeze()
+        if state is None:
+            state = input.new_zeros(input.size(0),
+                                    self.hidden_size,
+                                    requires_grad=False)
+        gate_hidden = self.hidden2hidden(state).squeeze()
+
+        i_r, i_i, i_n = gate_input.chunk(3, 1)
+        h_r, h_i, h_n = gate_hidden.chunk(3, 1)
+
+        resetgate = torch.sigmoid(i_r + h_r)
+        inputgate = torch.sigmoid(i_i + h_i)
+        newgate = torch.tanh(i_n + resetgate * h_n)
+        output = newgate + inputgate * (state - newgate)
+        return output
+
 class GRULayer(nn.Module):
   
     def __init__(self, input_size, hidden_size, bias=True):
         super(GRULayer, self).__init__()
-        self.cell = nn.GRUCell(input_size, hidden_size, bias)
+        #self.cell = nn.GRUCell(input_size, hidden_size, bias)
+        self.cell = MyGRUCell(input_size, hidden_size, bias)
   
     def forward(self, inputs):
         #seq_len, batch, input_size = input.size()
@@ -454,7 +491,7 @@ d_prob = 0
 
 
 gru_ = MyGRU # 5 times slower
-# gru_ = nn.GRU
+gru_ = nn.GRU
 
 gru = TextGRU(gru_,
               vocab_size=vocab_size,
@@ -466,6 +503,7 @@ gru = TextGRU(gru_,
               mode='static')
 
 model = gru
+# model = tcn
 
 model.to(device)
 optimizer = torch.optim.Adam(model.parameters())#, weight_decay=1e-3) #, lr=1e-4
@@ -626,12 +664,12 @@ Lastly, we want to checkpoint this model. It's important to do so, as training p
 Below we'll use Ignite's `ModelCheckpoint` handler to checkpoint models at the end of each epoch.
 """
 
-checkpointer = ModelCheckpoint('/tmp/models', 'textcnn', save_interval=1, n_saved=2, create_dir=True, save_as_state_dict=True, require_empty=False)
-trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpointer, {'textcnn': model})
+checkpointer = ModelCheckpoint('/tmp/models', 'lstm_torch', save_interval=1, n_saved=2, create_dir=True, save_as_state_dict=True, require_empty=False)
+trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpointer, {'lstm_torch': model})
 
 """### Run Engine
 
 Next, we'll run the trainer for 10 epochs and monitor results. Below we can see that progess bar prints the loss per iteration, and prints the results of training and validation as we specified in our custom function.
 """
 
-trainer.run(train_iterator, max_epochs=5)
+trainer.run(train_iterator, max_epochs=50)

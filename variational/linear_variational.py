@@ -4,50 +4,50 @@ import torch
 from torch.distributions.kl import kl_divergence
 from torch.distributions.utils import _standard_normal
 from torch.nn import init
-from torch.nn.functional import softplus
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorLaplace, PriorNormal
-from .utils import random_rademacher, kl_normal_normal
-from .variational import GaussianVariationalModule
+from .priors import PriorNormal
+from .variational import BayesByBackpropModule, random_rademacher
 
 
-class LinearPathwise(GaussianVariationalModule):
+class LinearPathwise(BayesByBackpropModule):
 
     __constants__ = ['bias']
 
-    def __init__(self, in_features, out_features, bias=True, prior=(0, 1)):
+    def __init__(self, in_features, out_features, bias=True, prior_args=(0, 1)):
         super(LinearPathwise, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight_posterior_mean = Parameter(
-            torch.Tensor(out_features, in_features))
-        self.weight_posterior_logscale = Parameter(
-            torch.Tensor(out_features, in_features))
-        # self.weight_posterior_sample = None
-        self.register_buffer("weight_prior_mean",
-                             torch.zeros_like(self.weight_posterior_mean) + prior[0])
-        self.register_buffer("weight_prior_scale",
-                             torch.zeros_like(self.weight_posterior_logscale) + prior[1])
+        self.weight_posterior = PosteriorNormal(
+            Parameter(torch.Tensor(out_features, in_features)),
+            Parameter(torch.Tensor(out_features, in_features)),
+            self, "weight")
         self.use_bias = bias
         if self.use_bias:
-            self.bias_posterior_mean = Parameter(torch.Tensor(out_features))
-            self.bias_posterior_logscale = Parameter(
-                torch.Tensor(out_features))
-            # self.bias_posterior_sample = None
-            self.register_buffer("bias_prior_mean",
-                                 torch.zeros_like(self.bias_posterior_mean) + prior[0])
-            self.register_buffer("bias_prior_scale",
-                                 torch.zeros_like(self.bias_posterior_logscale) + prior[1])
+            self.bias_posterior = PosteriorNormal(
+                Parameter(torch.Tensor(out_features)),
+                Parameter(torch.Tensor(out_features)),
+                self, "bias")
         else:
             self.register_parameter('bias', None)
+        self.prior = PriorNormal(*prior_args, self)
         self.reset_parameters()
 
-    def forward(self, input):
-        output = torch.matmul(input, self.weight_posterior_sample.t())
+    def kl_loss(self):
+        total_loss = (self.weight_posterior.log_prob(self.weight_sample) -
+                      self.prior.log_prob(self.weight_sample)).sum()
         if self.use_bias:
-            output += self.weight_posterior_sample
+            total_loss += (self.bias_posterior.log_prob(self.bias_sample) -
+                           self.prior.log_prob(self.bias_sample)).sum()
+        return total_loss
+
+    def forward(self, input):
+        self.weight_sample = self.weight_posterior.rsample()
+        output = torch.matmul(input, self.weight_sample.t())
+        if self.use_bias:
+            self.bias_sample = self.bias_posterior.rsample()
+            output += self.bias_sample
         return output
 
     def extra_repr(self):
@@ -63,12 +63,15 @@ class LinearFlipout(LinearPathwise):
             in_features, out_features, bias, prior)
 
     def forward(self, input):
-        output = torch.matmul(input, self.weight_posterior_mean.t())
+        output = torch.matmul(input, self.weight_loc.t())
         if self.use_bias:
-            output += self.bias_posterior_sample
+            self.bias_sample = self.bias_posterior.rsample()
+            output += self.bias_sample
 
         sign_input = random_rademacher(input)
         sign_output = random_rademacher(output)
+        self.weight_perturbation = self.weight_posterior.perturb()
+        self.weight_sample = self.weight_loc + self.weight_perturbation
         perturbed_input = torch.matmul(input * sign_input,
                                        self.weight_perturbation.t()) * sign_output
         output += perturbed_input

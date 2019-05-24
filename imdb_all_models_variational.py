@@ -4,17 +4,16 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import weight_norm
+from torchtext import data, datasets
+from torchtext.vocab import GloVe
 
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import EarlyStopping, ModelCheckpoint
 from ignite.metrics import Accuracy, Loss, RunningAverage
-from torchtext import data, datasets
-from torchtext.vocab import GloVe
-from variational import (Conv1dFlipout, Conv1dPathwise,
-                         GaussianVariationalModule, GRUFlipout, GRUPathwise,
-                         LinearFlipout, LinearPathwise)
+from variational import (ELBO, BayesByBackpropModule, Conv1dFlipout,
+                         Conv1dPathwise, GRUFlipout, LinearFlipout,
+                         LinearPathwise)
 
 SEED = 1234
 torch.manual_seed(SEED)
@@ -219,12 +218,11 @@ class TextGRU(nn.Module):
     def kl_loss(self):
         total_loss = 0.0
         for module in self.children():
-            if issubclass(type(module), GaussianVariationalModule):
+            if issubclass(type(module), BayesByBackpropModule):
                 total_loss += module.kl_loss()
         return total_loss
 
     def forward(self, x):
-        sequence_length, batch_size = x.shape
         x = self.embedding(x)
         _, x = self.gru(x)
         if self.debug:
@@ -235,11 +233,8 @@ class TextGRU(nn.Module):
                    self.hidden_dim)[-1, :, :, :]
         if self.debug:
             print(x.shape)
-        # if self.gru.bidirectional:
-        #  x = torch.cat((x[0,:,:], x[1,:,:]), dim = 1)
         if self.debug:
             print(x.shape)
-        # x = self.fc(self.dropout(x.squeeze()))
         x = self.fc(x.squeeze())
         if self.debug:
             print(x.shape)
@@ -265,7 +260,7 @@ class TextGRU(nn.Module):
 
 vocab_size, embedding_dim = TEXT.vocab.vectors.shape
 
-num_layers = 2
+num_layers = 1 # 2
 d_prob = 0
 
 gru_ = GRUFlipout  # many times slower
@@ -296,7 +291,7 @@ model = gru
 model.to(device)
 # , weight_decay=1e-3) #, lr=1e-4
 optimizer = torch.optim.Adam(model.parameters())
-criterion = nn.BCEWithLogitsLoss()
+criterion = ELBO(model, nn.BCEWithLogitsLoss())
 
 print(model)
 

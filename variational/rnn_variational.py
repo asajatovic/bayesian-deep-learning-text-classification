@@ -48,7 +48,7 @@ class GRUCellPathwise(BayesByBackpropModule):
 
 class GRUCellFlipout(BayesByBackpropModule):
 
-    __constants__ = ['input2hidden, hidden2hidden']
+    # __constants__ = ['input2hidden, hidden2hidden']
 
     def __init__(self, input_size, hidden_size, bias=True):
         super(GRUCellFlipout, self).__init__()
@@ -87,6 +87,8 @@ class GRUCellFlipout(BayesByBackpropModule):
 
 class GRULayer(BayesByBackpropModule):
 
+    # __constants__ = ['cell']
+
     def __init__(self, cell, input_size, hidden_size, bias=True):
         super(GRULayer, self).__init__()
         self.cell = cell(input_size, hidden_size, bias)
@@ -104,6 +106,8 @@ class GRULayer(BayesByBackpropModule):
 
 
 class _GRUBase(BayesByBackpropModule):
+
+    # __constants__ = ['layers']
 
     def __init__(self, cell, input_size, hidden_size, num_layers=2, bias=True):
         super(_GRUBase, self).__init__()

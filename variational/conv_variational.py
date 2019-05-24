@@ -1,7 +1,7 @@
 import math
 
 import torch
-import torch.nn as nn
+from torch.nn import init
 from torch.nn.modules.utils import _single
 from torch.nn.parameter import Parameter
 
@@ -58,6 +58,13 @@ class _ConvNdPathwise(BayesByBackpropModule):
             self.register_parameter('bias', None)
         self.prior = PriorNormal(*prior_args, self)
         self.reset_parameters()
+
+    def reset_parameters(self):
+        init.normal_(self.weight_loc, mean=0.0, std=0.1)
+        init.normal_(self.weight_scale, mean=-3.0, std=0.1)
+        if self.use_bias:
+            init.uniform_(self.bias_loc, -0.1, 0.1)
+            init.normal_(self.bias_scale, mean=-3.0, std=0.1)
 
     def kl_loss(self):
         total_loss = (self.weight_posterior.log_prob(self.weight_sample) -

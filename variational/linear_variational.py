@@ -34,6 +34,13 @@ class LinearPathwise(BayesByBackpropModule):
         self.prior = PriorNormal(*prior_args, self)
         self.reset_parameters()
 
+    def reset_parameters(self):
+        init.normal_(self.weight_loc, mean=0.0, std=0.1)
+        init.normal_(self.weight_scale, mean=-3.0, std=0.1)
+        if self.use_bias:
+            init.uniform_(self.bias_loc, -0.1, 0.1)
+            init.normal_(self.bias_scale, mean=-3.0, std=0.1)
+
     def kl_loss(self):
         total_loss = (self.weight_posterior.log_prob(self.weight_sample) -
                       self.prior.log_prob(self.weight_sample)).sum()

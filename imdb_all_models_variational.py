@@ -164,12 +164,12 @@ class TextTCN(nn.Module):
     def kl_loss(self):
         total_loss = 0.0
         for module in self.children():
-            if issubclass(type(module), GaussianVariationalModule):
+            if issubclass(type(module), BayesByBackpropModule):
                 total_loss += module.kl_loss()
         return total_loss
 
     def forward(self, x):
-        sequence_length, batch_size = x.shape
+        # sequence_length, batch_size = x.shape
         x = self.embedding(x.transpose(0, 1))
         x = self.tcn(x.transpose(1, 2))
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)  # global max pool
@@ -223,6 +223,7 @@ class TextGRU(nn.Module):
         return total_loss
 
     def forward(self, x):
+        sequence_length, batch_size = x.shape
         x = self.embedding(x)
         _, x = self.gru(x)
         if self.debug:
@@ -230,7 +231,7 @@ class TextGRU(nn.Module):
         x = x.view(-1,
                    self.num_directions,
                    batch_size,
-                   self.hidden_dim)[-1, :, :, :]
+                   self.hidden_dim)[-1, :, :, :] # check this
         if self.debug:
             print(x.shape)
         if self.debug:
@@ -260,7 +261,7 @@ class TextGRU(nn.Module):
 
 vocab_size, embedding_dim = TEXT.vocab.vectors.shape
 
-num_layers = 1 # 2
+num_layers = 1  # 2
 d_prob = 0
 
 gru_ = GRUFlipout  # many times slower
@@ -339,18 +340,18 @@ def predict_transform(output):
 
 Accuracy(output_transform=predict_transform).attach(
     train_evaluator, 'accuracy')
-Loss(criterion).attach(train_evaluator, 'bce')
+Loss(criterion).attach(train_evaluator, 'elbo')
 
 Accuracy(output_transform=predict_transform).attach(
     validation_evaluator, 'accuracy')
-Loss(criterion).attach(validation_evaluator, 'bce')
+Loss(criterion).attach(validation_evaluator, 'elbo')
 
 pbar = ProgressBar(persist=True, bar_format="")
 pbar.attach(trainer, ['loss'])
 
 
 def score_function(engine):
-    val_loss = engine.state.metrics['bce']
+    val_loss = engine.state.metrics['elbo']
     return -val_loss
 
 
@@ -364,10 +365,10 @@ def log_training_results(engine):
     train_evaluator.run(train_iterator)
     metrics = train_evaluator.state.metrics
     avg_accuracy = metrics['accuracy']
-    avg_bce = metrics['bce']
+    avg_elbo = metrics['elbo']
     pbar.log_message(
         "Training Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-        .format(engine.state.epoch, avg_accuracy, avg_bce))
+        .format(engine.state.epoch, avg_accuracy, avg_elbo))
 
 # @trainer.on(Events.EPOCH_COMPLETED)
 
@@ -376,10 +377,10 @@ def log_validation_results(engine):
     validation_evaluator.run(valid_iterator)
     metrics = validation_evaluator.state.metrics
     avg_accuracy = metrics['accuracy']
-    avg_bce = metrics['bce']
+    avg_elbo = metrics['elbo']
     pbar.log_message(
         "Validation Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-        .format(engine.state.epoch, avg_accuracy, avg_bce))
+        .format(engine.state.epoch, avg_accuracy, avg_elbo))
     pbar.n = pbar.last_print_n = 0
 
 

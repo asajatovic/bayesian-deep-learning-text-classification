@@ -15,10 +15,12 @@ class BayesByBackpropModule(nn.Module):
 class ELBO(nn.Module):
 
     def __init__(self, model, data_cost):
+        super(ELBO, self).__init__()
         self.model = model
         self.data_cost = data_cost
 
     def forward(self, input, target):
         num_examples = len(target)
-        kl_loss = self.model.kl_loss() / num_examples
-        return kl_loss + self.data_cost(input, target)
+        scaling = 1
+        scaled_kl_loss = scaling * self.model.kl_loss() / num_examples
+        return scaled_kl_loss + self.data_cost(input, target)

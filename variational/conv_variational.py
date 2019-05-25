@@ -60,18 +60,21 @@ class _ConvNdPathwise(BayesByBackpropModule):
         self.reset_parameters()
 
     def reset_parameters(self):
-        init.normal_(self.weight_loc, mean=0.0, std=0.1)
-        init.normal_(self.weight_scale, mean=-3.0, std=0.1)
+        stdv = 1.0 / math.sqrt(self.out_channels)
+        init.normal_(self.weight_loc, mean=0.0, std=stdv)
+        init.normal_(self.weight_scale, mean=-7.0, std=stdv)
         if self.use_bias:
-            init.uniform_(self.bias_loc, -0.1, 0.1)
-            init.normal_(self.bias_scale, mean=-3.0, std=0.1)
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight_loc)
+            bound = 1 / math.sqrt(fan_in)
+            init.normal_(self.bias_loc, mean=0.0, std=bound)
+            init.normal_(self.bias_scale, mean=-7.0, std=bound)
 
     def kl_loss(self):
-        total_loss = (self.weight_posterior.log_prob(self.weight_sample) -
-                      self.prior.log_prob(self.weight_sample)).sum()
+        total_loss = (self.weight_posterior.log_prob(self.weight_sample).sum() -
+                      self.prior.log_prob(self.weight_sample).sum())
         if self.use_bias:
-            total_loss += (self.bias_posterior.log_prob(self.bias_sample) -
-                           self.prior.log_prob(self.bias_sample)).sum()
+            total_loss += (self.bias_posterior.log_prob(self.bias_sample).sum() -
+                           self.prior.log_prob(self.bias_sample).sum())
         return total_loss
 
     def extra_repr(self):
@@ -94,7 +97,7 @@ class Conv1dPathwise(_ConvNdPathwise):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode='zeros', prior_args=(0, 1)):
+                 bias=True, padding_mode='zeros', prior_args=(0, 0.1)):
         kernel_size = _single(kernel_size)
         stride = _single(stride)
         padding = _single(padding)
@@ -110,7 +113,7 @@ class Conv1dPathwise(_ConvNdPathwise):
             self.bias_sample = self.bias_posterior.rsample()
         output = torch.conv1d(input,
                               self.weight_sample,
-                              self.bias__sample,
+                              self.bias_sample,
                               self.stride,
                               self.padding,
                               self.dilation,
@@ -122,7 +125,7 @@ class Conv1dFlipout(Conv1dPathwise):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode='zeros', prior_args=(0, 1)):
+                 bias=True, padding_mode='zeros', prior_args=(0, 0.1)):
         kernel_size = _single(kernel_size)
         stride = _single(stride)
         padding = _single(padding)
@@ -149,7 +152,7 @@ class Conv1dFlipout(Conv1dPathwise):
         sign_output = random_rademacher(output)
 
         self.weight_perturbation = self.weight_posterior.perturb()
-        self.weight_sample = self.weight_loc + self.weight_pertubation
+        self.weight_sample = self.weight_loc + self.weight_perturbation
         perturbed_input = torch.conv1d(input * sign_input,
                                        self.weight_perturbation,
                                        None,

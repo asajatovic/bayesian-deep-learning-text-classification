@@ -3,4 +3,4 @@ from .linear_variational import LinearFlipout, LinearPathwise
 from .posteriors import PosteriorNormal
 from .priors import PriorNormal, PriorLaplace
 from .rnn_variational import GRUPathwise, GRUFlipout
-from .variational import ELBO, BayesByBackpropModule
+from .variational import ELBO, BayesByBackpropModule, random_rademacher

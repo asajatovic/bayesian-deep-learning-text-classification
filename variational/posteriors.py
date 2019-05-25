@@ -83,9 +83,9 @@ class PosteriorNormal(Distribution):
         if self._validate_args:
             self._validate_sample(value)
         # compute the variance
-        var = (self.stddev ** 2)
+        # var = (self.stddev ** 2)
         log_scale = self.stddev.log()
-        return -((value - self.loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
+        return -((value - self.loc) ** 2) / (2 * self.variance) - log_scale - math.log(math.sqrt(2 * math.pi))
 
     def cdf(self, value):
         if self._validate_args:

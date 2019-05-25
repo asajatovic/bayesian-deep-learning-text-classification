@@ -141,7 +141,7 @@ print ('Shape of LABEL.vocab.vectors : ', LABEL.vocab.vectors)
 """Now we must convert our split datasets into iterators, we'll take advantage of **torchtext.data.BucketIterator**! BucketIterator pads every element of a batch to the length of the longest element of the batch."""
 
 train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits((train_data, valid_data, test_data), 
-                                                                           batch_size=32*1,
+                                                                           batch_size=32*4,
                                                                            device=device)
 
 """Let's actually explore what the output of the iterator is, this way we'll know what the input of the model is, how to compare the label to the output and how to setup are process_functions for Ignite's `Engine`.
@@ -210,7 +210,7 @@ class TextCNN(nn.Module):
 
     def forward(self, x):
         sequence_length, batch_size = x.shape
-        x = self.embedding(x).transpose(1, 2)
+        x = self.embedding(x.transpose(0, 1)).transpose(1,2)
         x = [F.relu(conv(x)) for conv in self.conv]
         #x = [F.max_pool1d(c, c.size(-1)).squeeze(dim=-1) for c in x]
         x = [F.adaptive_max_pool1d(c, 1).squeeze(dim=-1) for c in x] # global max pool
@@ -247,14 +247,14 @@ class Chomp1d(nn.Module):
 class TemporalBlock(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock, self).__init__()
-        self.conv1 = weight_norm(nn.Conv1d(n_inputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        self.conv1 = nn.Conv1d(n_inputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation)
         self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
 
-        self.conv2 = weight_norm(nn.Conv1d(n_outputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        self.conv2 = nn.Conv1d(n_outputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation)
         self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
@@ -317,8 +317,8 @@ class TextTCN(nn.Module):
 
     def forward(self, x):
         sequence_length, batch_size = x.shape
-        x = self.embedding(x.transpose(0, 1))
-        x = self.tcn(x.transpose(1,2))
+        x = self.embedding(x.transpose(0, 1)).transpose(1, 2)
+        x = self.tcn(x)
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1) # global max pool
         x = self.fc(self.dropout(x))
         return self.activation(x).squeeze()
@@ -486,7 +486,7 @@ tcn = TextTCN(vocab_size=vocab_size,
                 d_prob=0.5,
                 mode='static')
 
-num_layers = 2
+num_layers = 1 # 2
 d_prob = 0
 
 
@@ -504,9 +504,10 @@ gru = TextGRU(gru_,
 
 model = gru
 # model = tcn
+# model = cnn
 
 model.to(device)
-optimizer = torch.optim.Adam(model.parameters())#, weight_decay=1e-3) #, lr=1e-4
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)#, weight_decay=1e-3) #, lr=1e-4
 criterion = nn.BCELoss()
 
 print(model)
@@ -672,4 +673,4 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpointer, {'lstm_torch': m
 Next, we'll run the trainer for 10 epochs and monitor results. Below we can see that progess bar prints the loss per iteration, and prints the results of training and validation as we specified in our custom function.
 """
 
-trainer.run(train_iterator, max_epochs=50)
+trainer.run(train_iterator, max_epochs=10*2)

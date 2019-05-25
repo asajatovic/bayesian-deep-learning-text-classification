@@ -15,7 +15,7 @@ class LinearPathwise(BayesByBackpropModule):
 
     __constants__ = ['bias']
 
-    def __init__(self, in_features, out_features, bias=True, prior_args=(0, 1)):
+    def __init__(self, in_features, out_features, bias=True, prior_args=(0, 0.1)):
         super(LinearPathwise, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -35,11 +35,14 @@ class LinearPathwise(BayesByBackpropModule):
         self.reset_parameters()
 
     def reset_parameters(self):
-        init.normal_(self.weight_loc, mean=0.0, std=0.1)
-        init.normal_(self.weight_scale, mean=-3.0, std=0.1)
+        stdv = 1.0 / math.sqrt(self.out_features)
+        init.normal_(self.weight_loc, mean=0.0, std=stdv)
+        init.normal_(self.weight_scale, mean=-7.0, std=stdv)
         if self.use_bias:
-            init.uniform_(self.bias_loc, -0.1, 0.1)
-            init.normal_(self.bias_scale, mean=-3.0, std=0.1)
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight_loc)
+            bound = 1 / math.sqrt(fan_in)
+            init.normal_(self.bias_loc, mean=0.0, std=bound)
+            init.normal_(self.bias_scale, mean=-7.0, std=bound)
 
     def kl_loss(self):
         total_loss = (self.weight_posterior.log_prob(self.weight_sample) -
@@ -65,7 +68,7 @@ class LinearPathwise(BayesByBackpropModule):
 
 class LinearFlipout(LinearPathwise):
 
-    def __init__(self, in_features, out_features, bias=True, prior=(0, 1)):
+    def __init__(self, in_features, out_features, bias=True, prior=(0, 0.1)):
         super(LinearFlipout, self).__init__(
             in_features, out_features, bias, prior)
 

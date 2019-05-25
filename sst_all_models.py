@@ -82,7 +82,7 @@ Next SST training and test datasets are downloaded, the training data is split i
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-TEXT = data.Field(lower=True, batch_first=False)#, fix_length=400)
+TEXT = data.Field(lower=True, tokenize='spacy', batch_first=False)#, fix_length=400)
 LABEL = data.LabelField(dtype=torch.float)
 
 
@@ -147,7 +147,7 @@ print ('Shape of LABEL.vocab.vectors : ', LABEL.vocab.vectors)
 """Now we must convert our split datasets into iterators, we'll take advantage of **torchtext.data.BucketIterator**! BucketIterator pads every element of a batch to the length of the longest element of the batch."""
 
 train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits((train_data, valid_data, test_data), 
-                                                                           batch_size=32,
+                                                                           batch_size=32*4,
                                                                            device=device)
 
 """Let's actually explore what the output of the iterator is, this way we'll know what the input of the model is, how to compare the label to the output and how to setup are process_functions for Ignite's `Engine`.
@@ -323,7 +323,7 @@ class TextTCN(nn.Module):
 
     def forward(self, x):
         sequence_length, batch_size = x.shape
-        x = self.embedding(x).transpose(1, 2)
+        x = self.embedding(x.transpose(1,0)).transpose(1, 2)
         x = self.tcn(x)
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1) # global max pool
         x = self.fc(self.dropout(x))
@@ -456,12 +456,12 @@ tcn = TextTCN(vocab_size=vocab_size,
                 d_prob=0.5,
                 mode='static')
 
-num_layers = 2
+num_layers = 1
 d_prob = 0.5
 
 
 gru_ = MyGRU # 5 times slower on IMDB
-# gru_ = nn.GRU
+gru_ = nn.GRU
 
 gru = TextGRU(gru_,
               vocab_size=vocab_size,
@@ -473,6 +473,7 @@ gru = TextGRU(gru_,
               mode='static')
 
 model = gru
+# model = tcn
 
 model.to(device)
 optimizer = torch.optim.Adam(model.parameters())#, weight_decay=1e-3) #, lr=1e-4
@@ -641,4 +642,4 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpointer, {'textcnn': mode
 Next, we'll run the trainer for 10 epochs and monitor results. Below we can see that progess bar prints the loss per iteration, and prints the results of training and validation as we specified in our custom function.
 """
 
-trainer.run(train_iterator, max_epochs=5*2)
+trainer.run(train_iterator, max_epochs=10*1)

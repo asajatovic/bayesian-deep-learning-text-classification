@@ -201,12 +201,10 @@ class LSTMFlipout(LSTMPathwise):
             sign_output = random_rademacher(size=(batch_size, self.hidden_size*4),
                                             dtype=input.dtype,
                                             device=input.device)
-            # print(type(state[0]))
-            state = flipout_lstm_step(input, state,
-                                      self.weight_ih_loc, self.weight_hh_loc,
-                                      self.weight_ih_perturbation, self.weight_hh_perturbation,
-                                      self.bias_hh_sample, self.bias_ih_sample,
-                                      sign_input, sign_output)
-            print(type(state))
-            outputs += [state[0]]
+            out, state = flipout_lstm_step(input, state,
+                                           self.weight_ih_loc, self.weight_hh_loc,
+                                           self.weight_ih_perturbation, self.weight_hh_perturbation,
+                                           self.bias_hh_sample, self.bias_ih_sample,
+                                           sign_input, sign_output)
+            outputs += [out]
         return torch.stack(outputs), state

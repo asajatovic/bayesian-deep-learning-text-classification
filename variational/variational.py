@@ -2,8 +2,12 @@ import torch
 import torch.nn as nn
 
 
-def random_rademacher(input):
+def random_rademacher_like(input):
     return 2 * torch.zeros_like(input).bernoulli(p=0.5) - 1
+
+
+def random_rademacher(size, dtype, device):
+    return 2 * torch.zeros(size, dtype=dtype, device=device).bernoulli(p=0.5) - 1
 
 
 class BayesByBackpropModule(nn.Module):

@@ -7,7 +7,7 @@ from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
 from .priors import PriorNormal
-from .variational import BayesByBackpropModule, random_rademacher
+from .variational import BayesByBackpropModule, random_rademacher_like
 
 
 class _ConvNdPathwise(BayesByBackpropModule):
@@ -148,8 +148,8 @@ class Conv1dFlipout(Conv1dPathwise):
                               self.dilation,
                               self.groups)
 
-        sign_input = random_rademacher(input)
-        sign_output = random_rademacher(output)
+        sign_input = random_rademacher_like(input)
+        sign_output = random_rademacher_like(output)
 
         self.weight_perturbation = self.weight_posterior.perturb()
         self.weight_sample = self.weight_loc + self.weight_perturbation

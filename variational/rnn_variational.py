@@ -6,10 +6,9 @@ import torch.nn.init as init
 from torch.nn.parameter import Parameter
 
 from .linear_variational import LinearFlipout, LinearPathwise
-from .variational import BayesByBackpropModule, random_rademacher
+from .variational import BayesByBackpropModule
 from .posteriors import PosteriorNormal
 from .priors import PriorNormal
-from .variational import BayesByBackpropModule, random_rademacher
 
 
 class RNNCellBase(BayesByBackpropModule):

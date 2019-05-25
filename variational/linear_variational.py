@@ -8,7 +8,7 @@ from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
 from .priors import PriorNormal
-from .variational import BayesByBackpropModule, random_rademacher
+from .variational import BayesByBackpropModule, random_rademacher_like
 
 
 class LinearPathwise(BayesByBackpropModule):
@@ -78,8 +78,8 @@ class LinearFlipout(LinearPathwise):
             self.bias_sample = self.bias_posterior.rsample()
             output += self.bias_sample
 
-        sign_input = random_rademacher(input)
-        sign_output = random_rademacher(output)
+        sign_input = random_rademacher_like(input)
+        sign_output = random_rademacher_like(output)
         self.weight_perturbation = self.weight_posterior.perturb()
         self.weight_sample = self.weight_loc + self.weight_perturbation
         perturbed_input = torch.matmul(input * sign_input,

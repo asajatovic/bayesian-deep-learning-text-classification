@@ -1,3 +1,4 @@
+import csv
 import os
 
 from torchtext import data
@@ -27,7 +28,7 @@ class YELP(data.Dataset):
             Remaining keyword arguments: Passed to the constructor of
                 data.Dataset.
         """
-        fields = [('text', text_field), ('label', label_field)]
+        fields = [('label', label_field), ('text', text_field)]
 
         def get_label_str(label):
             pre = 'very ' if fine_grained else ''
@@ -35,8 +36,9 @@ class YELP(data.Dataset):
                     '4': 'positive', '5': pre + 'positive', None: None}[label]
 
         label_field.preprocessing = data.Pipeline(get_label_str)
-        with open(os.path.expanduser(path)) as f:
-            examples = [data.Example.fromCSV(line, fields) for line in f]
+        with open(os.path.expanduser(path), encoding="utf8") as f:
+            reader = csv.reader(f)
+            examples = [data.Example.fromlist(row, fields) for row in reader]
 
         super(YELP, self).__init__(examples, fields, **kwargs)
 

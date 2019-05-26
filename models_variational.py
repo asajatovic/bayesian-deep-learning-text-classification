@@ -19,19 +19,19 @@ class Chomp1d(nn.Module):
 class TemporalBlock(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock, self).__init__()
-        self.conv1 = Conv1dFlipout(n_inputs, n_outputs, kernel_size,
+        self.conv1 = Conv1dPathwise(n_inputs, n_outputs, kernel_size,
                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.ReLU()
 
-        self.conv2 = Conv1dFlipout(n_outputs, n_outputs, kernel_size,
+        self.conv2 = Conv1dPathwise(n_outputs, n_outputs, kernel_size,
                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.ReLU()
 
         self.net = nn.Sequential(self.conv1, self.chomp1, self.relu1,
                                  self.conv2, self.chomp2, self.relu2)
-        self.downsample = Conv1dFlipout(
+        self.downsample = Conv1dPathwise(
             n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
         self.relu = nn.ReLU()
         # self.init_weights()
@@ -84,7 +84,7 @@ class TextTCN(nn.Module):
                                    num_channels=[hidden_dim] * num_layers,
                                    kernel_size=kernel_size,
                                    dropout=d_prob)
-        self.fc = nn.Linear(hidden_dim, num_classes)
+        self.fc = LinearPathwise(hidden_dim, num_classes)
         self.activation = nn.Sigmoid() if num_classes == 1 else nn.LogSoftmax(dim=1)
 
     def forward(self, x):
@@ -130,15 +130,15 @@ class TextLSTM(BayesByBackpropModule):
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         if weights is not None:
             self.load_embeddings(weights)
-        lstms = [LSTMFlipout(input_size=embedding_dim,
+        lstms = [LSTMPathwise(input_size=embedding_dim,
                                 hidden_size=hidden_dim,
                                 bias=True)]
-        lstms += [LSTMFlipout(input_size=hidden_dim,
+        lstms += [LSTMPathwise(input_size=hidden_dim,
                                 hidden_size=hidden_dim,
                                 bias=True) for i in range(num_layers-1)]
         self.lstms = nn.ModuleList(lstms)
         self.num_directions = 1
-        self.fc = LinearFlipout(hidden_dim * self.num_directions, num_classes)
+        self.fc = LinearPathwise(hidden_dim * self.num_directions, num_classes)
         self.activation = nn.Sigmoid() if num_classes == 1 else nn.LogSoftmax(dim=1)
         self.debug = True
 
@@ -156,7 +156,7 @@ class TextLSTM(BayesByBackpropModule):
         out = x
         for lstm in self.lstms:
             out, state = lstm(out, state)
-        x, _ = state
+        x, _ = state # final hidden state
         if self.debug:
             print(x.shape)
         x = x.view(-1,

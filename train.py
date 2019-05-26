@@ -1,5 +1,6 @@
 import argparse
 import random
+import time
 
 import torch
 import torch.nn as nn
@@ -21,8 +22,10 @@ parser = argparse.ArgumentParser(
     description='PyTorch Text Classification training')
 parser.add_argument('--batch_size', default=128, type=float, help='batch_size')
 parser.add_argument('--hidden', default=100, type=int, help='hidden_size')
-parser.add_argument('--lr', default=0.001, type=float, help='learning_rate')
+parser.add_argument('--lr', default=0.01, type=float, help='learning_rate')
 parser.add_argument('--model', type=str, help='tcn or lstm')
+parser.add_argument('--layers', type=int, default=2, help='num_layers')
+parser.add_argument('--kernel', type=int, default=5, help='kernel_size')
 parser.add_argument('--epochs', default=20, type=int, help='max_epochs')
 parser.add_argument('--dropout', default=0.3, type=float, help='dropout_rate')
 parser.add_argument('--dataset', type=str, help='sst or imdb')
@@ -36,19 +39,25 @@ torch.cuda.manual_seed(SEED)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Training on: {device}')
-
-TEXT = data.Field(fix_length=None, lower=True,
-                  tokenize='spacy', batch_first=False)
-LABEL = data.LabelField(dtype=torch.float)
+print("Preparing data...")
+start_time = time.time()
 
 dataset = args.dataset
 if dataset == 'imdb':
+    lr = 0.001
+    TEXT = data.Field(fix_length=400, lower=True,
+                      tokenize='spacy', batch_first=False)
+    LABEL = data.LabelField(dtype=torch.float)
     train_data, test_data = datasets.IMDB.splits(
         TEXT, LABEL, root='./data/imdb/')
     train_data, valid_data = train_data.split(
         split_ratio=0.8, random_state=random.seed(SEED))
 
 if dataset == 'sst':
+    lr = 0.01
+    TEXT = data.Field(fix_length=30, lower=True,
+                      tokenize='spacy', batch_first=False)
+    LABEL = data.LabelField(dtype=torch.float)
     train_data, valid_data, test_data = datasets.SST.splits(TEXT, LABEL,
                                                             root='./data/sst/',
                                                             fine_grained=False,
@@ -56,11 +65,14 @@ if dataset == 'sst':
                                                             ex.label != 'neutral')
 
 if dataset == 'yelp':
+    lr = 0.0001  # test
+    TEXT = data.Field(fix_length=300, lower=True,
+                      tokenize='spacy', batch_first=False)
+    LABEL = data.LabelField(dtype=torch.long)  # multi-class
     train_data, test_data = YELP.splits(
         TEXT, LABEL, root='./data/yelp/')
     train_data, valid_data = train_data.split(
         split_ratio=0.8, random_state=random.seed(SEED))
-    LABEL = data.LabelField(dtype=torch.long)
 
 TEXT.build_vocab(train_data, vectors=GloVe(
     name='6B', dim=100, cache='./glove/'))
@@ -71,10 +83,15 @@ train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits((trai
                                                                            batch_size=batch_size,
                                                                            device=device)
 
+total_time = time.time() - start_time
+print(f"...prepared data in {int(total_time/60)} minutes")
+
 vocab_size, embedding_dim = TEXT.vocab.vectors.shape
 
 model_name = args.model
 hidden_dim = args.hidden
+num_layers = args.layers
+kernel_size = args.kernel
 num_labels = len(LABEL.vocab.itos)
 num_classes = 1 if num_labels == 2 else num_labels
 dropout = args.dropout
@@ -85,18 +102,18 @@ if variational is True:
         model = TextLSTMVariational(vocab_size=vocab_size,
                                     embedding_dim=embedding_dim,
                                     hidden_dim=hidden_dim,
-                                    num_layers=2,
+                                    num_layers=num_layers,
                                     num_classes=num_classes,
                                     d_prob=dropout,
                                     mode='static',
                                     weights=TEXT.vocab.vectors)
-
+    lr = 0.01
     if model_name == 'tcn':
         model = TextTCNVariational(vocab_size=vocab_size,
                                    embedding_dim=embedding_dim,
                                    hidden_dim=hidden_dim,
-                                   num_layers=3,
-                                   kernel_size=5,
+                                   num_layers=num_layers,
+                                   kernel_size=kernel_size,
                                    num_classes=num_classes,
                                    d_prob=dropout,
                                    mode='static',
@@ -107,18 +124,18 @@ else:
         model = TextLSTM(vocab_size=vocab_size,
                          embedding_dim=embedding_dim,
                          hidden_dim=hidden_dim,
-                         num_layers=2,
+                         num_layers=num_layers,
                          num_classes=num_classes,
                          d_prob=dropout,
                          mode='static',
                          weights=TEXT.vocab.vectors)
-
+    lr = 0.01
     if model_name == 'tcn':
         model = TextTCN(vocab_size=vocab_size,
                         embedding_dim=embedding_dim,
                         hidden_dim=hidden_dim,
-                        num_layers=3,
-                        kernel_size=5,
+                        num_layers=num_layers,
+                        kernel_size=kernel_size,
                         num_classes=num_classes,
                         d_prob=dropout,
                         mode='static',
@@ -126,8 +143,8 @@ else:
 
 
 if torch.cuda.device_count() > 1:
-  print("Let's use", torch.cuda.device_count(), "GPUs!")
-  model = nn.DataParallel(model)
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    model = nn.DataParallel(model)
 
 model.to(device)
 lr = args.lr
@@ -169,17 +186,20 @@ RunningAverage(output_transform=lambda x: x).attach(trainer, 'loss')
 def predict_transform(output):
     # modify for softmax
     y_pred, y = output
-    y_pred = torch.round(y_pred)
+    if y_pred.ndimension() == 1:
+        y_pred = torch.round(y_pred)
+    else:
+        y_pred = torch.argmax(y_pred, dim=1)
     return y_pred, y
 
 
 Accuracy(output_transform=predict_transform).attach(
     train_evaluator, 'accuracy')
-Loss(criterion).attach(train_evaluator, 'bce')
+Loss(criterion).attach(train_evaluator, 'loss')
 
 Accuracy(output_transform=predict_transform).attach(
     validation_evaluator, 'accuracy')
-Loss(criterion).attach(validation_evaluator, 'bce')
+Loss(criterion).attach(validation_evaluator, 'loss')
 
 pbar = ProgressBar(persist=True, bar_format="")
 pbar.attach(trainer, ['loss'])
@@ -191,7 +211,7 @@ def score_function(engine):
 
 
 handler = EarlyStopping(
-    patience=5, score_function=score_function, trainer=trainer)
+    patience=20, score_function=score_function, trainer=trainer)
 validation_evaluator.add_event_handler(Events.COMPLETED, handler)
 
 
@@ -200,10 +220,10 @@ def log_training_results(engine):
     train_evaluator.run(train_iterator)
     metrics = train_evaluator.state.metrics
     avg_accuracy = metrics['accuracy']
-    avg_bce = metrics['bce']
+    avg_loss = metrics['loss']
     pbar.log_message(
         "Training Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-        .format(engine.state.epoch, avg_accuracy, avg_bce))
+        .format(engine.state.epoch, avg_accuracy, avg_loss))
 
 
 @trainer.on(Events.EPOCH_COMPLETED)
@@ -211,10 +231,10 @@ def log_validation_results(engine):
     validation_evaluator.run(valid_iterator)
     metrics = validation_evaluator.state.metrics
     avg_accuracy = metrics['accuracy']
-    avg_bce = metrics['bce']
+    avg_loss = metrics['loss']
     pbar.log_message(
         "Validation Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-        .format(engine.state.epoch, avg_accuracy, avg_bce))
+        .format(engine.state.epoch, avg_accuracy, avg_loss))
     pbar.n = pbar.last_print_n = 0
 
 
@@ -225,3 +245,21 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED,
 
 max_epochs = args.epochs
 trainer.run(train_iterator, max_epochs=max_epochs)
+
+
+def test(model, test_iterator, acc):
+    print("Evaluating on test set...")
+    acc.reset()
+    for batch in test_iterator:
+        model.eval()
+        with torch.no_grad():
+            x, y = batch.text, batch.label
+            y_pred = model(x)
+            output = acc._output_transform((y_pred, y))
+            acc.update(output)
+    score = acc.compute()
+    print(f"Test set score is {score}")
+
+
+acc = Accuracy(output_transform=predict_transform)
+test(model, test_iterator, acc)

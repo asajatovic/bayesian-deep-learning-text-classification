@@ -47,14 +47,18 @@ def flipout_lstm_step(input, state,
 
 
 class LSTMLayer(nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_size, hidden_size, bias=True):
         super(LSTMLayer, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.weight_ih = Parameter(torch.randn(4 * hidden_size, input_size))
         self.weight_hh = Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        if self.use_bias:
+            self.bias_ih = Parameter(torch.randn(4 * hidden_size))
+            self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        else:
+            self.register_parameter('bias_ih', None)
+            self.register_parameter('bias_hh', None)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -80,6 +84,13 @@ class LSTMLayer(nn.Module):
                               self.bias_hh, self.bias_ih)
             outputs += [state[0]]
         return torch.stack(outputs), state
+
+    def extra_repr(self):
+        s = '{input_size}, {hidden_size}'
+        s += ', bias={self.use_bias}'
+        if 'nonlinearity' in self.__dict__ and self.nonlinearity != "tanh":
+            s += ', nonlinearity={nonlinearity}'
+        return s
 
 
 class LSTMPathwise(BayesByBackpropModule):
@@ -166,6 +177,13 @@ class LSTMPathwise(BayesByBackpropModule):
                               self.bias_hh_sample, self.bias_ih_sample)
             outputs += [state[0]]
         return torch.stack(outputs), state
+
+    def extra_repr(self):
+        s = '{input_size}, {hidden_size}'
+        s += ', bias={self.use_bias}'
+        if 'nonlinearity' in self.__dict__ and self.nonlinearity != "tanh":
+            s += ', nonlinearity={nonlinearity}'
+        return s
 
 
 class LSTMFlipout(LSTMPathwise):

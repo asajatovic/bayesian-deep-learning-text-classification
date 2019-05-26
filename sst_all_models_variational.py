@@ -11,12 +11,11 @@ from ignite.handlers import EarlyStopping, ModelCheckpoint
 from ignite.metrics import Accuracy, Loss, RunningAverage
 from torchtext import data, datasets
 from torchtext.vocab import GloVe
-from variational import (ELBO, BayesByBackpropModule, Conv1dFlipout,
+from variational import (ELBO, SEED, BayesByBackpropModule, Conv1dFlipout,
                          Conv1dPathwise, GRUFlipout, GRUPathwise,
-                         LinearFlipout, LinearPathwise)
+                         LinearFlipout, LinearPathwise, LSTMFlipout, LSTMLayer,
+                         LSTMPathwise, 1234, =, torch.manual_seed)
 
-SEED = 1234
-torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -200,9 +199,9 @@ class TextTCN(nn.Module):
                 'Unexpected value of mode. Please choose from static, nonstatic, rand.')
 
 
-class TextGRU(BayesByBackpropModule):
-    def __init__(self, gru, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, d_prob, mode):
-        super(TextGRU, self).__init__()
+class TextLSTM(BayesByBackpropModule):
+    def __init__(self, lstm, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, d_prob, mode):
+        super(TextLSTM, self).__init__()
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
@@ -212,7 +211,7 @@ class TextGRU(BayesByBackpropModule):
         self.mode = mode
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         self.load_embeddings()
-        self.gru = gru(input_size=embedding_dim,
+        self.lstm = lstm(input_size=embedding_dim,
                        hidden_size=hidden_dim,
                        num_layers=num_layers,
                        #    dropout=d_prob,
@@ -225,17 +224,16 @@ class TextGRU(BayesByBackpropModule):
         self.debug = True
 
     def kl_loss(self):
-        return self.gru.kl_loss() + self.fc.kl_loss()
-        # total_loss = 0.0
-        # for module in self.children():
-        #     if issubclass(type(module), BayesByBackpropModule):
-        #         total_loss += module.kl_loss()
-        # return total_loss
+        total_loss = 0.0
+        for module in self.children():
+            if issubclass(type(module), BayesByBackpropModule):
+                total_loss += module.kl_loss()
+        return total_loss
 
     def forward(self, x):
         sequence_length, batch_size = x.shape
         x = self.embedding(x)
-        _, x = self.gru(x)
+        _, (x, _) = self.lstm(x)
         if self.debug:
             print(x.shape)
         x = x.view(-1,
@@ -291,11 +289,11 @@ num_layers = 1
 d_prob = 0.5
 
 
-gru_ = GRUFlipout  # 5 times slower on IMDB
-gru_ = GRUPathwise
-# gru_ = nn.GRU
+lstm_ = LSTMFlipout  # 5 times slower on IMDB
+lstm_ = LSTMPathwise
+# lstm_ = nn.LSTM
 
-gru = TextGRU(gru_,
+lstm = TextLSTM(lstm_,
               vocab_size=vocab_size,
               embedding_dim=embedding_dim,
               hidden_dim=100,
@@ -304,7 +302,7 @@ gru = TextGRU(gru_,
               d_prob=d_prob,
               mode='static')
 
-model = gru
+model = lstm
 # model = tcn
 
 model.to(device)

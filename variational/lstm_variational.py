@@ -74,7 +74,8 @@ class LSTMLayer(nn.Module):
             state = (zeros, zeros)
         outputs = []
         for input in inputs:
-            state = lstm_step(input, state, self.weight_ih, self.weight_hh,
+            state = lstm_step(input, state, 
+                              self.weight_ih, self.weight_hh,
                               self.bias_hh, self.bias_ih)
             outputs += [state[0]]
         return torch.stack(outputs), state

@@ -377,9 +377,9 @@ class MyGRU(nn.Module):
         return torch.stack(out), torch.stack(states)
     
 
-class TextGRU(nn.Module):
-    def __init__(self, gru, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, d_prob, mode):
-        super(TextGRU, self).__init__()
+class TextLSTM(nn.Module):
+    def __init__(self, lstm, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, d_prob, mode):
+        super(TextLSTM, self).__init__()
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
@@ -389,7 +389,7 @@ class TextGRU(nn.Module):
         self.mode = mode
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         self.load_embeddings()
-        self.gru = gru(input_size=embedding_dim,
+        self.lstm = lstm(input_size=embedding_dim,
                        hidden_size=hidden_dim,
                        num_layers=num_layers,
                        dropout=d_prob,
@@ -403,14 +403,14 @@ class TextGRU(nn.Module):
     def forward(self, x):
         sequence_length, batch_size = x.shape
         x = self.embedding(x)
-        _, x = self.gru(x)
+        _, (x, _) = self.lstm(x)
         if self.debug: print(x.shape)
         x = x.view(-1,
                    self.num_directions, 
                    batch_size, 
                    self.hidden_dim)[-1,:,:,:]
         if self.debug: print(x.shape)
-        #if self.gru.bidirectional:
+        #if self.lstm.bidirectional:
         #  x = torch.cat((x[0,:,:], x[1,:,:]), dim = 1)
         if self.debug: print(x.shape)
         x = self.fc(self.dropout(x.squeeze()))
@@ -460,10 +460,10 @@ num_layers = 1
 d_prob = 0.5
 
 
-gru_ = MyGRU # 5 times slower on IMDB
-gru_ = nn.GRU
+lstm_ = MyGRU # 5 times slower on IMDB
+lstm_ = nn.LSTM
 
-gru = TextGRU(gru_,
+lstm = TextLSTM(lstm_,
               vocab_size=vocab_size,
               embedding_dim=embedding_dim,
               hidden_dim=100,
@@ -472,7 +472,7 @@ gru = TextGRU(gru_,
               d_prob=d_prob,
               mode='static')
 
-model = gru
+model = lstm
 # model = tcn
 
 model.to(device)

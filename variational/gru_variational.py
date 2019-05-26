@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-from torch import lstm_cell as lstm_step
+from torch import gru_cell as gru_step
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
@@ -13,18 +13,36 @@ from .variational import (BayesByBackpropModule, random_rademacher,
 
 
 @torch.jit.script
-def flipout_lstm_step(input, state,
+def flipout_gru_step(input, state,
                       weight_ih_mean, weight_hh_mean,
                       weight_ih_perturbation, weight_hh_perturbation,
                       bias_hh, bias_ih,
-                      sign_input, sign_hidden, sign_output):
-    # type: (Tensor, Tuple[Tensor, Tensor], Tensor, Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor], Tensor, Tensor, Tensor)
+                      sign_input, sign_output):
+    # type: (Tensor, Tuple[Tensor, Tensor], Tensor, Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor], Tensor, Tensor)
     # -> Tuple[Tensor, Tuple[Tensor, Tensor]]
+    gi = torch.mm(input, weight_ih_mean.t())
+    if bias_hh is not None:
+        gi += bias_ih
+    gh = torch.mm(hidden, weight_hh_mean.t())
+    if bias_hh is not None:
+        gh += bias_hh
+
+    gi_perturbed = torch.mm(input*sign_input, weight_ih_perturbation.t())
+    gh = torch.mm(hidden, weight_hh_perturbation.t())
+
+    i_r, i_i, i_n = gi.chunk(3, 1)
+    h_r, h_i, h_n = gh.chunk(3, 1)
+
+    resetgate = torch.sigmoid(i_r + h_r)
+    inputgate = torch.sigmoid(i_i + h_i)
+    newgate = torch.tanh(i_n + resetgate * h_n)
+    hy = newgate + inputgate * (hidden - newgate)
+
+    return hy
     hx, cx = state
-    perturbed_input = input * sign_input
-    perturbed_hx = hx * sign_hidden
-    perturbed_gates = (torch.mm(perturbed_input, weight_ih_perturbation.t()) +
-                       torch.mm(perturbed_hx, weight_hh_perturbation.t())) * sign_output
+    new_input = input * sign_input
+    perturbed_gates = (torch.mm(new_input, weight_ih_perturbation.t()) +
+                       torch.mm(hx, weight_hh_perturbation.t())) * sign_output
 
     gates = (torch.mm(input, weight_ih_mean.t()) +
              torch.mm(hx, weight_hh_mean.t()))
@@ -75,7 +93,7 @@ class LSTMLayer(nn.Module):
             state = (zeros, zeros)
         outputs = []
         for input in inputs:
-            state = lstm_step(input, state,
+            state = lstm_step(input, state, 
                               self.weight_ih, self.weight_hh,
                               self.bias_hh, self.bias_ih)
             outputs += [state[0]]
@@ -200,7 +218,6 @@ class LSTMFlipout(LSTMPathwise):
         for input in inputs:
             self.sample_weights()
             sign_input = random_rademacher_like(input)
-            sign_hidden = random_rademacher_like(state[0])
             sign_output = random_rademacher(size=(batch_size, self.hidden_size*4),
                                             dtype=input.dtype,
                                             device=input.device)
@@ -208,6 +225,6 @@ class LSTMFlipout(LSTMPathwise):
                                            self.weight_ih_loc, self.weight_hh_loc,
                                            self.weight_ih_perturbation, self.weight_hh_perturbation,
                                            self.bias_hh_sample, self.bias_ih_sample,
-                                           sign_input, sign_hidden, sign_output)
+                                           sign_input, sign_output)
             outputs += [out]
         return torch.stack(outputs), state

@@ -17,7 +17,7 @@ class Chomp1d(nn.Module):
 
 
 class TemporalBlock(nn.Module):
-    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
+    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding):
         super(TemporalBlock, self).__init__()
         self.conv1 = Conv1dPathwise(n_inputs, n_outputs, kernel_size,
                                    stride=stride, padding=padding, dilation=dilation)
@@ -49,7 +49,7 @@ class TemporalBlock(nn.Module):
 
 
 class TemporalConvNet(nn.Module):
-    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels, kernel_size=2):
         super(TemporalConvNet, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -58,7 +58,7 @@ class TemporalConvNet(nn.Module):
             in_channels = num_inputs if i == 0 else num_channels[i-1]
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+                                     padding=(kernel_size-1) * dilation_size)]
 
         self.network = nn.Sequential(*layers)
 
@@ -67,7 +67,7 @@ class TemporalConvNet(nn.Module):
 
 
 class TextTCN(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, kernel_size, num_classes, d_prob, mode, weights=None):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, kernel_size, num_classes, mode, weights=None):
         super(TextTCN, self).__init__()
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
@@ -75,15 +75,13 @@ class TextTCN(nn.Module):
         self.num_layers = num_layers
         self.kernel_size = kernel_size
         self.num_classes = num_classes
-        self.d_prob = d_prob
         self.mode = mode
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         if weights is not None:
             self.load_embeddings(weights)
         self.tcn = TemporalConvNet(num_inputs=embedding_dim,
                                    num_channels=[hidden_dim] * num_layers,
-                                   kernel_size=kernel_size,
-                                   dropout=d_prob)
+                                   kernel_size=kernel_size)
         self.fc = LinearPathwise(hidden_dim, num_classes)
         self.activation = nn.Sigmoid() if num_classes == 1 else nn.LogSoftmax(dim=1)
 
@@ -118,14 +116,13 @@ class TextTCN(nn.Module):
 
 
 class TextLSTM(BayesByBackpropModule):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, d_prob, mode, weights):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, mode, weights):
         super(TextLSTM, self).__init__()
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.num_classes = num_classes
-        self.d_prob = d_prob
         self.mode = mode
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         if weights is not None:

@@ -65,14 +65,16 @@ if dataset == 'sst':
                                                             ex.label != 'neutral')
 
 if dataset == 'yelp':
-    lr = 0.0001  # test
+    lr = 0.001  # test
     TEXT = data.Field(fix_length=300, lower=True,
                       tokenize='spacy', batch_first=False)
     LABEL = data.LabelField(dtype=torch.long)  # multi-class
     train_data, test_data = YELP.splits(
         TEXT, LABEL, root='./data/yelp/')
     train_data, valid_data = train_data.split(
-        split_ratio=0.8, random_state=random.seed(SEED))
+        split_ratio=0.8, stratified=True, random_state=random.seed(SEED))
+    print(train_data[0].label)
+    print(train_data[0].text)
 
 TEXT.build_vocab(train_data, vectors=GloVe(
     name='6B', dim=100, cache='./glove/'))
@@ -104,7 +106,6 @@ if variational is True:
                                     hidden_dim=hidden_dim,
                                     num_layers=num_layers,
                                     num_classes=num_classes,
-                                    d_prob=dropout,
                                     mode='static',
                                     weights=TEXT.vocab.vectors)
     lr = 0.01
@@ -115,7 +116,6 @@ if variational is True:
                                    num_layers=num_layers,
                                    kernel_size=kernel_size,
                                    num_classes=num_classes,
-                                   d_prob=dropout,
                                    mode='static',
                                    weights=TEXT.vocab.vectors)
     model_name += "_variational"
@@ -186,10 +186,8 @@ RunningAverage(output_transform=lambda x: x).attach(trainer, 'loss')
 def predict_transform(output):
     # modify for softmax
     y_pred, y = output
-    if y_pred.ndimension() == 1:
+    if y_pred.squeeze().ndimension() == 1:
         y_pred = torch.round(y_pred)
-    else:
-        y_pred = torch.argmax(y_pred, dim=1)
     return y_pred, y
 
 
@@ -211,7 +209,7 @@ def score_function(engine):
 
 
 handler = EarlyStopping(
-    patience=20, score_function=score_function, trainer=trainer)
+    patience=10, score_function=score_function, trainer=trainer)
 validation_evaluator.add_event_handler(Events.COMPLETED, handler)
 
 
@@ -238,10 +236,13 @@ def log_validation_results(engine):
     pbar.n = pbar.last_print_n = 0
 
 
-checkpointer = ModelCheckpoint('./saved_models', f'best_{model_name}_{dataset}', save_interval=1,
+checkpoint_name = f'best_{model_name}_{dataset}'
+if args.variational:
+    checkpoint_name = f'best_{model_name}_{dataset}_variational'
+checkpointer = ModelCheckpoint('./saved_models', checkpoint_name, save_interval=1,
                                n_saved=2, create_dir=True, save_as_state_dict=True, require_empty=False)
 trainer.add_event_handler(Events.EPOCH_COMPLETED,
-                          checkpointer, {f'best_{model_name}_{dataset}': model})
+                          checkpointer, {checkpoint_name: model})
 
 max_epochs = args.epochs
 trainer.run(train_iterator, max_epochs=max_epochs)

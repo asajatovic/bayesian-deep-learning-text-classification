@@ -6,7 +6,7 @@ from torch.nn.modules.utils import _single
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorNormal
+from .priors import PriorNormal, PriorLaplace
 from .variational import BayesByBackpropModule, random_rademacher_like
 
 
@@ -56,7 +56,7 @@ class _ConvNdPathwise(BayesByBackpropModule):
                 self, "bias")
         else:
             self.register_parameter('bias', None)
-        self.prior = PriorNormal(*prior_args, self)
+        self.prior = PriorLaplace(*prior_args, self)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -70,6 +70,7 @@ class _ConvNdPathwise(BayesByBackpropModule):
             init.normal_(self.bias_scale, mean=-7.0, std=bound)
 
     def kl_loss(self):
+        # return 0.0
         total_loss = (self.weight_posterior.log_prob(self.weight_sample).sum() -
                       self.prior.log_prob(self.weight_sample).sum())
         if self.use_bias:

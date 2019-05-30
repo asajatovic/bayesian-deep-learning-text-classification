@@ -25,17 +25,20 @@ parser.add_argument('--hidden', default=100, type=int, help='hidden_size')
 parser.add_argument('--lr', default=0.01, type=float, help='learning_rate')
 parser.add_argument('--model', type=str, help='tcn or lstm')
 parser.add_argument('--layers', type=int, default=2, help='num_layers')
-parser.add_argument('--kernel', type=int, default=5, help='kernel_size')
+parser.add_argument('--kernel', type=int, default=3, help='kernel_size')
 parser.add_argument('--epochs', default=20, type=int, help='max_epochs')
 parser.add_argument('--dropout', default=0.3, type=float, help='dropout_rate')
 parser.add_argument('--dataset', type=str, help='sst or imdb')
-parser.add_argument('--variational', type=bool, default=False,
+parser.add_argument('--variational', type=str, default='no',
                     help='variational or ordinary model')
 args = parser.parse_args()
 
 SEED = 1234
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Training on: {device}')
@@ -99,7 +102,7 @@ num_classes = 1 if num_labels == 2 else num_labels
 dropout = args.dropout
 
 variational = args.variational
-if variational is True:
+if variational == 'yes':
     if model_name == 'lstm':
         model = TextLSTMVariational(vocab_size=vocab_size,
                                     embedding_dim=embedding_dim,
@@ -236,13 +239,10 @@ def log_validation_results(engine):
     pbar.n = pbar.last_print_n = 0
 
 
-checkpoint_name = f'best_{model_name}_{dataset}'
-if args.variational:
-    checkpoint_name = f'best_{model_name}_{dataset}_variational'
-checkpointer = ModelCheckpoint('./saved_models', checkpoint_name, save_interval=1,
-                               n_saved=2, create_dir=True, save_as_state_dict=True, require_empty=False)
+checkpointer = ModelCheckpoint('./saved_models', f'{dataset}_', save_interval=2,
+                               n_saved=1, create_dir=True, save_as_state_dict=True, require_empty=False)
 trainer.add_event_handler(Events.EPOCH_COMPLETED,
-                          checkpointer, {checkpoint_name: model})
+                          checkpointer, {model_name: model})
 
 max_epochs = args.epochs
 trainer.run(train_iterator, max_epochs=max_epochs)

@@ -7,7 +7,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorNormal
+from .priors import PriorNormal, PriorLaplace
 from .variational import BayesByBackpropModule, random_rademacher_like
 
 

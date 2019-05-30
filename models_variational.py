@@ -22,18 +22,18 @@ class TemporalBlock(nn.Module):
         self.conv1 = Conv1dPathwise(n_inputs, n_outputs, kernel_size,
                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp1 = Chomp1d(padding)
-        self.relu1 = nn.ReLU()
+        self.relu1 = nn.Softplus()
 
         self.conv2 = Conv1dPathwise(n_outputs, n_outputs, kernel_size,
                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp2 = Chomp1d(padding)
-        self.relu2 = nn.ReLU()
+        self.relu2 = nn.Softplus()
 
         self.net = nn.Sequential(self.conv1, self.chomp1, self.relu1,
                                  self.conv2, self.chomp2, self.relu2)
         self.downsample = Conv1dPathwise(
             n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
-        self.relu = nn.ReLU()
+        self.relu = nn.Softplus()
         # self.init_weights()
 
     def init_weights(self):
@@ -88,7 +88,7 @@ class TextTCN(nn.Module):
     def forward(self, x):
         x = self.embedding(x.transpose(1, 0)).transpose(1, 2)
         x = self.tcn(x)
-        x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)  # global max pool
+        x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)  # global max pool
         x = self.fc(x)
         return self.activation(x).squeeze()
 

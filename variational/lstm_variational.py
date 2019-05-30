@@ -7,7 +7,7 @@ from torch import lstm_cell as lstm_step
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorNormal
+from .priors import PriorNormal, PriorLaplace
 from .variational import (BayesByBackpropModule, random_rademacher,
                           random_rademacher_like)
 
@@ -118,7 +118,7 @@ class LSTMPathwise(BayesByBackpropModule):
                 self, "bias_hh")
         else:
             self.register_parameter('bias', None)
-        self.prior = PriorNormal(*prior_args, self)
+        self.prior = PriorLaplace(*prior_args, self)
         self.reset_parameters()
 
     def reset_parameters(self):

@@ -90,7 +90,7 @@ class TextTCN(nn.Module):
     def forward(self, x):
         x = self.embedding(x.transpose(1, 0)).transpose(1, 2)
         x = self.tcn(x)
-        x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)  # global max pool
+        x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)  # global max pool
         x = self.fc(self.dropout(x))
         return self.activation(x).squeeze()
 

@@ -1,4 +1,6 @@
 import argparse
+import math
+import os
 import random
 import time
 
@@ -155,7 +157,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 criterion = nn.BCELoss() if num_classes == 1 else nn.NLLLoss()
 if variational is True:
     print("Using ELBO loss")
-    criterion = ELBO(model, criterion)
+    m = math.ceil(len(train_data) / batch_size)
+    criterion = ELBO(model, criterion, scaling=m)
 
 print(model)
 
@@ -239,9 +242,15 @@ def log_validation_results(engine):
     pbar.n = pbar.last_print_n = 0
 
 
-checkpointer = ModelCheckpoint('./saved_models', f'{dataset}_', save_interval=2,
-                               n_saved=1, create_dir=True, save_as_state_dict=True, require_empty=False)
-trainer.add_event_handler(Events.EPOCH_COMPLETED,
+checkpointer = ModelCheckpoint(dirname='./saved_models_normal', 
+                               filename_prefix=dataset, 
+                               #save_interval=2,
+                               score_function=score_function,
+                               score_name='val_acc',
+                               n_saved=1, require_empty=False,
+                               create_dir=True, 
+                               save_as_state_dict=False)
+validation_evaluator.add_event_handler(Events.EPOCH_COMPLETED,
                           checkpointer, {model_name: model})
 
 max_epochs = args.epochs
@@ -261,6 +270,12 @@ def test(model, test_iterator, acc):
     score = acc.compute()
     print(f"Test set score is {score}")
 
+
+for filename in os.listdir('./saved_models_normal'):
+    if f'{dataset}_{model_name}' in filename:
+        path = './saved_models_normal/' + filename
+        model = torch.load(path)
+        print(f'Loaded {filename} for inference!')
 
 acc = Accuracy(output_transform=predict_transform)
 test(model, test_iterator, acc)

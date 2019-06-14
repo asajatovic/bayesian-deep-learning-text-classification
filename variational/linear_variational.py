@@ -1,17 +1,15 @@
 import math
 
 import torch
-from torch.distributions.kl import kl_divergence
-from torch.distributions.utils import _standard_normal
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorNormal, PriorLaplace
-from .variational import BayesByBackpropModule, random_rademacher_like
+from .priors import PriorLaplace, PriorNormal
+from .variational import BBBModule
 
 
-class LinearPathwise(BayesByBackpropModule):
+class LinearPathwise(BBBModule):
 
     __constants__ = ['bias']
 
@@ -64,25 +62,3 @@ class LinearPathwise(BayesByBackpropModule):
         return 'in_features={}, out_features={}, bias={}'.format(
             self.in_features, self.out_features, self.use_bias
         )
-
-
-class LinearFlipout(LinearPathwise):
-
-    def __init__(self, in_features, out_features, bias=True, prior=(0, 0.1)):
-        super(LinearFlipout, self).__init__(
-            in_features, out_features, bias, prior)
-
-    def forward(self, input):
-        output = torch.matmul(input, self.weight_loc.t())
-        if self.use_bias:
-            self.bias_sample = self.bias_posterior.rsample()
-            output += self.bias_sample
-
-        sign_input = random_rademacher_like(input)
-        sign_output = random_rademacher_like(output)
-        self.weight_perturbation = self.weight_posterior.perturb()
-        self.weight_sample = self.weight_loc + self.weight_perturbation
-        perturbed_input = torch.matmul(input * sign_input,
-                                       self.weight_perturbation.t()) * sign_output
-        output += perturbed_input
-        return output

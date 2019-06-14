@@ -49,20 +49,18 @@ start_time = time.time()
 
 dataset = args.dataset
 if dataset == 'imdb':
-    lr = 0.001
     TEXT = data.Field(fix_length=400, lower=True,
                       tokenize='spacy', batch_first=False)
-    LABEL = data.LabelField(dtype=torch.float)
+    LABEL = data.LabelField(dtype=torch.long)
     train_data, test_data = datasets.IMDB.splits(
         TEXT, LABEL, root='./data/imdb/')
     train_data, valid_data = train_data.split(
-        split_ratio=0.8, random_state=random.seed(SEED))
+        split_ratio=0.8, stratified=True, random_state=random.seed(SEED))
 
 if dataset == 'sst':
-    lr = 0.01
     TEXT = data.Field(fix_length=30, lower=True,
                       tokenize='spacy', batch_first=False)
-    LABEL = data.LabelField(dtype=torch.float)
+    LABEL = data.LabelField(dtype=torch.long)
     train_data, valid_data, test_data = datasets.SST.splits(TEXT, LABEL,
                                                             root='./data/sst/',
                                                             fine_grained=False,
@@ -70,16 +68,13 @@ if dataset == 'sst':
                                                             ex.label != 'neutral')
 
 if dataset == 'yelp':
-    lr = 0.001  # test
     TEXT = data.Field(fix_length=300, lower=True,
                       tokenize='spacy', batch_first=False)
-    LABEL = data.LabelField(dtype=torch.long)  # multi-class
+    LABEL = data.LabelField(dtype=torch.long)
     train_data, test_data = YELP.splits(
         TEXT, LABEL, root='./data/yelp/')
     train_data, valid_data = train_data.split(
         split_ratio=0.8, stratified=True, random_state=random.seed(SEED))
-    print(train_data[0].label)
-    print(train_data[0].text)
 
 TEXT.build_vocab(train_data, vectors=GloVe(
     name='6B', dim=100, cache='./glove/'))
@@ -100,7 +95,7 @@ hidden_dim = args.hidden
 num_layers = args.layers
 kernel_size = args.kernel
 num_labels = len(LABEL.vocab.itos)
-num_classes = 1 if num_labels == 2 else num_labels
+num_classes = num_labels
 dropout = args.dropout
 
 variational = args.variational
@@ -154,11 +149,10 @@ if torch.cuda.device_count() > 1:
 model.to(device)
 lr = args.lr
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-criterion = nn.BCELoss() if num_classes == 1 else nn.NLLLoss()
+criterion = nn.NLLLoss()
 if variational is True:
     print("Using ELBO loss")
-    m = math.ceil(len(train_data) / batch_size)
-    criterion = ELBO(model, criterion, scaling=m)
+    criterion = ELBO(model, criterion)
 
 print(model)
 
@@ -188,21 +182,10 @@ validation_evaluator = Engine(eval_on_batch)
 
 RunningAverage(output_transform=lambda x: x).attach(trainer, 'loss')
 
-
-def predict_transform(output):
-    # modify for softmax
-    y_pred, y = output
-    if y_pred.squeeze().ndimension() == 1:
-        y_pred = torch.round(y_pred)
-    return y_pred, y
-
-
-Accuracy(output_transform=predict_transform).attach(
-    train_evaluator, 'accuracy')
+Accuracy().attach(train_evaluator, 'accuracy')
 Loss(criterion).attach(train_evaluator, 'loss')
 
-Accuracy(output_transform=predict_transform).attach(
-    validation_evaluator, 'accuracy')
+Accuracy().attach(validation_evaluator, 'accuracy')
 Loss(criterion).attach(validation_evaluator, 'loss')
 
 pbar = ProgressBar(persist=True, bar_format="")
@@ -214,8 +197,9 @@ def score_function(engine):
     return val_acc
 
 
-handler = EarlyStopping(
-    patience=10, score_function=score_function, trainer=trainer)
+handler = EarlyStopping(patience=10,
+                        score_function=score_function,
+                        trainer=trainer)
 validation_evaluator.add_event_handler(Events.COMPLETED, handler)
 
 
@@ -242,16 +226,16 @@ def log_validation_results(engine):
     pbar.n = pbar.last_print_n = 0
 
 
-checkpointer = ModelCheckpoint(dirname='./saved_models_normal', 
-                               filename_prefix=dataset, 
-                               #save_interval=2,
+checkpointer = ModelCheckpoint(dirname='./saved_models',
+                               filename_prefix=dataset,
+                               # save_interval=2,
                                score_function=score_function,
                                score_name='val_acc',
                                n_saved=1, require_empty=False,
-                               create_dir=True, 
+                               create_dir=True,
                                save_as_state_dict=False)
 validation_evaluator.add_event_handler(Events.EPOCH_COMPLETED,
-                          checkpointer, {model_name: model})
+                                       checkpointer, {model_name: model})
 
 max_epochs = args.epochs
 trainer.run(train_iterator, max_epochs=max_epochs)
@@ -277,5 +261,5 @@ for filename in os.listdir('./saved_models_normal'):
         model = torch.load(path)
         print(f'Loaded {filename} for inference!')
 
-acc = Accuracy(output_transform=predict_transform)
+acc = Accuracy()
 test(model, test_iterator, acc)

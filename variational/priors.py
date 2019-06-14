@@ -1,4 +1,5 @@
 import math
+import warnings
 from numbers import Number
 
 import torch
@@ -8,21 +9,7 @@ from torch.distributions.utils import _standard_normal
 
 
 class PriorNormal(Distribution):
-    r"""
-    Creates a normal (also called Gaussian) distribution parameterized by
-    :attr:`loc` and :attr:`scale`.
 
-    Example::
-
-        >>> m = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
-        >>> m.sample()  # normally distributed with loc=0 and scale=1
-        tensor([ 0.1046])
-
-    Args:
-        loc (float or Tensor): mean of the distribution (often referred to as mu)
-        scale (float or Tensor): standard deviation of the distribution
-            (often referred to as sigma)
-    """
     arg_constraints = {'loc': constraints.real, 'scale': constraints.positive}
     support = constraints.real
     has_rsample = True
@@ -52,14 +39,9 @@ class PriorNormal(Distribution):
         super(PriorNormal, self).__init__(
             batch_shape, validate_args=validate_args)
 
-    # def expand(self, batch_shape, _instance=None):
-    #     new = self._get_checked_instance(Normal, _instance)
-    #     batch_shape = torch.Size(batch_shape)
-    #     new.loc = self.loc.expand(batch_shape)
-    #     new.scale = self.scale.expand(batch_shape)
-    #     super(Normal, new).__init__(batch_shape, validate_args=False)
-    #     new._validate_args = self._validate_args
-    #     return new
+    def expand(self, batch_shape, _instance=None):
+        warnings.warn('Expaning the prior distribution is not allowed!')
+        return self
 
     def sample(self, sample_shape=torch.Size()):
         shape = self._extended_shape(sample_shape)
@@ -103,19 +85,7 @@ class PriorNormal(Distribution):
 
 
 class PriorLaplace(Distribution):
-    r"""
-    Creates a Laplace distribution parameterized by :attr:`loc` and :attr:'scale'.
 
-    Example::
-
-        >>> m = Laplace(torch.tensor([0.0]), torch.tensor([1.0]))
-        >>> m.sample()  # Laplace distributed with loc=0, scale=1
-        tensor([ 0.1046])
-
-    Args:
-        loc (float or Tensor): mean of the distribution
-        scale (float or Tensor): scale of the distribution
-    """
     arg_constraints = {'loc': constraints.real, 'scale': constraints.positive}
     support = constraints.real
     has_rsample = True
@@ -141,16 +111,12 @@ class PriorLaplace(Distribution):
             batch_shape = torch.Size()
         else:
             batch_shape = self.loc.size()
-        super(PriorLaplace, self).__init__(batch_shape, validate_args=validate_args)
+        super(PriorLaplace, self).__init__(
+            batch_shape, validate_args=validate_args)
 
-    # def expand(self, batch_shape, _instance=None):
-    #     new = self._get_checked_instance(PriorLaplace, _instance)
-    #     batch_shape = torch.Size(batch_shape)
-    #     new.loc = self.loc.expand(batch_shape)
-    #     new.scale = self.scale.expand(batch_shape)
-    #     super(PriorLaplace, new).__init__(batch_shape, validate_args=False)
-    #     new._validate_args = self._validate_args
-    #     return new
+    def expand(self, batch_shape, _instance=None):
+        warnings.warn('Expaning the prior distribution is not allowed!')
+        return self
 
     def rsample(self, sample_shape=torch.Size()):
         shape = self._extended_shape(sample_shape)

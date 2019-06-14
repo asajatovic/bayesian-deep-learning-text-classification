@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from variational import (ELBO, BayesByBackpropModule, Conv1dFlipout,
-                         Conv1dPathwise, GRUFlipout, GRUPathwise,
-                         LinearFlipout, LinearPathwise, LSTMFlipout, LSTMLayer,
+from variational import (ELBO, BBBModule,
+                         Conv1dPathwise, LinearPathwise, LSTMLayer,
                          LSTMPathwise)
 
 
@@ -20,12 +19,12 @@ class TemporalBlock(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding):
         super(TemporalBlock, self).__init__()
         self.conv1 = Conv1dPathwise(n_inputs, n_outputs, kernel_size,
-                                   stride=stride, padding=padding, dilation=dilation)
+                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.Softplus()
 
         self.conv2 = Conv1dPathwise(n_outputs, n_outputs, kernel_size,
-                                   stride=stride, padding=padding, dilation=dilation)
+                                    stride=stride, padding=padding, dilation=dilation)
         self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.Softplus()
 
@@ -95,7 +94,7 @@ class TextTCN(nn.Module):
     def kl_loss(self):
         total_loss = 0.0
         for module in self.children():
-            if issubclass(type(module), BayesByBackpropModule):
+            if issubclass(type(module), BBBModule):
                 total_loss += module.kl_loss()
         return total_loss
 
@@ -115,7 +114,7 @@ class TextTCN(nn.Module):
                 'Unexpected value of mode. Please choose from static, nonstatic, rand.')
 
 
-class TextLSTM(BayesByBackpropModule):
+class TextLSTM(BBBModule):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, num_classes, mode, weights):
         super(TextLSTM, self).__init__()
         self.vocab_size = vocab_size
@@ -128,11 +127,11 @@ class TextLSTM(BayesByBackpropModule):
         if weights is not None:
             self.load_embeddings(weights)
         lstms = [LSTMPathwise(input_size=embedding_dim,
-                                hidden_size=hidden_dim,
-                                bias=True)]
+                              hidden_size=hidden_dim,
+                              bias=True)]
         lstms += [LSTMPathwise(input_size=hidden_dim,
-                                hidden_size=hidden_dim,
-                                bias=True) for i in range(num_layers-1)]
+                               hidden_size=hidden_dim,
+                               bias=True) for i in range(num_layers-1)]
         self.lstms = nn.ModuleList(lstms)
         self.num_directions = 1
         self.fc = LinearPathwise(hidden_dim * self.num_directions, num_classes)
@@ -142,7 +141,7 @@ class TextLSTM(BayesByBackpropModule):
     def kl_loss(self):
         total_loss = 0.0
         for module in self.children():
-            if issubclass(type(module), BayesByBackpropModule):
+            if issubclass(type(module), BBBModule):
                 total_loss += module.kl_loss()
         return total_loss
 
@@ -153,13 +152,13 @@ class TextLSTM(BayesByBackpropModule):
         out = x
         for lstm in self.lstms:
             out, state = lstm(out, state)
-        x, _ = state # final hidden state
+        x, _ = state  # final hidden state
         if self.debug:
             print(x.shape)
         x = x.view(-1,
                    self.num_directions,
                    batch_size,
-                   self.hidden_dim)[-1 , :, :, :]
+                   self.hidden_dim)[-1, :, :, :]
         if self.debug:
             print(x.shape)
         if self.debug:

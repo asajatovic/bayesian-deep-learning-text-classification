@@ -6,11 +6,11 @@ from torch.nn.modules.utils import _single
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorNormal, PriorLaplace
-from .variational import BayesByBackpropModule, random_rademacher_like
+from .priors import PriorLaplace, PriorNormal
+from .variational import BBBModule
 
 
-class _ConvNdPathwise(BayesByBackpropModule):
+class _ConvNdPathwise(BBBModule):
 
     __constants__ = ['stride', 'padding',
                      'dilation', 'groups', 'bias', 'padding_mode']
@@ -70,7 +70,6 @@ class _ConvNdPathwise(BayesByBackpropModule):
             init.normal_(self.bias_scale, mean=-7.0, std=bound)
 
     def kl_loss(self):
-        # return 0.0
         total_loss = (self.weight_posterior.log_prob(self.weight_sample).sum() -
                       self.prior.log_prob(self.weight_sample).sum())
         if self.use_bias:
@@ -119,47 +118,4 @@ class Conv1dPathwise(_ConvNdPathwise):
                               self.padding,
                               self.dilation,
                               self.groups)
-        return output
-
-
-class Conv1dFlipout(Conv1dPathwise):
-
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode='zeros', prior_args=(0, 0.1)):
-        kernel_size = _single(kernel_size)
-        stride = _single(stride)
-        padding = _single(padding)
-        dilation = _single(dilation)
-        self.seed = sum(ord(i) for i in type(self).__name__)
-        super(Conv1dFlipout, self).__init__(in_channels, out_channels,
-                                            kernel_size, stride, padding,
-                                            dilation, groups, bias,
-                                            padding_mode, prior_args)
-
-    def forward(self, input):
-        self.bias_sample = None
-        if self.use_bias:
-            self.bias_sample = self.bias_posterior.rsample()
-        output = torch.conv1d(input,
-                              self.weight_loc,
-                              self.bias_sample,
-                              self.stride,
-                              self.padding,
-                              self.dilation,
-                              self.groups)
-
-        sign_input = random_rademacher_like(input)
-        sign_output = random_rademacher_like(output)
-
-        self.weight_perturbation = self.weight_posterior.perturb()
-        self.weight_sample = self.weight_loc + self.weight_perturbation
-        perturbed_input = torch.conv1d(input * sign_input,
-                                       self.weight_perturbation,
-                                       None,
-                                       self.stride,
-                                       self.padding,
-                                       self.dilation,
-                                       self.groups) * sign_output
-        output += perturbed_input
         return output

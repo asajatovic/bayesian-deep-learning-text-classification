@@ -8,7 +8,9 @@ dependencies:
   - ignite
   - ipython
   - jupyter
+  - matplotlib
   - notebook
+  - nltk
   - pip
   - python=3.6
   - pytorch

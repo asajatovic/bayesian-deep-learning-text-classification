@@ -30,7 +30,8 @@ parser.add_argument('--layers', type=int, default=2, help='num_layers')
 parser.add_argument('--kernel', type=int, default=3, help='kernel_size')
 parser.add_argument('--epochs', default=20, type=int, help='max_epochs')
 parser.add_argument('--dropout', default=0.3, type=float, help='dropout_rate')
-parser.add_argument('--dataset', type=str, help='sst or imdb')
+parser.add_argument('--prior', default="normal", type=str, help='prior type (normal or laplace)')
+parser.add_argument('--dataset', type=str, help='sst, imdb or yelp')
 parser.add_argument('--variational', type=str, default='no',
                     help='variational or ordinary model')
 args = parser.parse_args()
@@ -100,6 +101,7 @@ dropout = args.dropout
 
 variational = args.variational
 if variational == 'yes':
+    prior_type = args.prior
     if model_name == 'lstm':
         model = TextLSTMVariational(vocab_size=vocab_size,
                                     embedding_dim=embedding_dim,
@@ -107,7 +109,8 @@ if variational == 'yes':
                                     num_layers=num_layers,
                                     num_classes=num_classes,
                                     mode='static',
-                                    weights=TEXT.vocab.vectors)
+                                    weights=TEXT.vocab.vectors,
+                                    prior_type=prior_type)
     lr = 0.01
     if model_name == 'tcn':
         model = TextTCNVariational(vocab_size=vocab_size,
@@ -117,8 +120,9 @@ if variational == 'yes':
                                    kernel_size=kernel_size,
                                    num_classes=num_classes,
                                    mode='static',
-                                   weights=TEXT.vocab.vectors)
-    model_name += "_variational"
+                                   weights=TEXT.vocab.vectors,
+                                   prior_type=prior_type)
+    model_name += "_variational_" + prior_type
 else:
     if model_name == 'lstm':
         model = TextLSTM(vocab_size=vocab_size,

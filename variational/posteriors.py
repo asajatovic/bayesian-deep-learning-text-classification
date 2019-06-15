@@ -1,4 +1,5 @@
 import math
+import warnings
 from numbers import Number
 
 import torch
@@ -27,7 +28,7 @@ class PosteriorNormal(Distribution):
     def variance(self):
         return self.stddev.pow(2)
 
-    def __init__(self, loc, scale, module, name, validate_args=None):
+    def __init__(self, module, name, loc, scale, validate_args=None):
         self.loc = loc
         self.scale = scale
         module.register_parameter(f'{name}_loc', self.loc)
@@ -40,7 +41,7 @@ class PosteriorNormal(Distribution):
             batch_shape, validate_args=validate_args)
 
     def expand(self, batch_shape, _instance=None):
-        warnings.warn('Expaning the posterior distribution is not allowed!')
+        warnings.warn('Expanding the posterior distribution is not allowed!')
         return self
 
     def sample(self, sample_shape=torch.Size()):
@@ -63,8 +64,6 @@ class PosteriorNormal(Distribution):
     def log_prob(self, value):
         if self._validate_args:
             self._validate_sample(value)
-        # compute the variance
-        # var = (self.stddev ** 2)
         log_scale = self.stddev.log()
         return -((value - self.loc) ** 2) / (2 * self.variance) - log_scale - math.log(math.sqrt(2 * math.pi))
 

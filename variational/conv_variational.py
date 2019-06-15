@@ -6,7 +6,7 @@ from torch.nn.modules.utils import _single
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorLaplace, PriorNormal
+from .priors import PriorLaplace, PriorNormal, prior_builder
 from .variational import BBBModule
 
 
@@ -17,7 +17,7 @@ class _ConvNdPathwise(BBBModule):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride,
                  padding, dilation, transposed, output_padding,
-                 groups, bias, padding_mode, prior_args):
+                 groups, bias, padding_mode, prior_type):
         super(_ConvNdPathwise, self).__init__()
         if in_channels % groups != 0:
             raise ValueError('in_channels must be divisible by groups')
@@ -36,27 +36,30 @@ class _ConvNdPathwise(BBBModule):
 
         if transposed:
             self.weight_posterior = PosteriorNormal(
+                self, "weight",
                 Parameter(torch.Tensor(
                     in_channels, out_channels // groups, *kernel_size)),
                 Parameter(torch.Tensor(
-                    in_channels, out_channels // groups, *kernel_size)),
-                self, "weight")
+                    in_channels, out_channels // groups, *kernel_size))
+            )
         else:
             self.weight_posterior = PosteriorNormal(
+                self, "weight",
                 Parameter(torch.Tensor(
                     out_channels, in_channels // groups, *kernel_size)),
                 Parameter(torch.Tensor(
-                    out_channels, in_channels // groups, *kernel_size)),
-                self, "weight")
+                    out_channels, in_channels // groups, *kernel_size))
+            )
         self.use_bias = bias
         if self.use_bias:
             self.bias_posterior = PosteriorNormal(
+                self, "bias",
                 Parameter(torch.Tensor(out_channels)),
-                Parameter(torch.Tensor(out_channels)),
-                self, "bias")
+                Parameter(torch.Tensor(out_channels))
+            )
         else:
             self.register_parameter('bias', None)
-        self.prior = PriorLaplace(*prior_args, self)
+        self.prior = prior_builder(prior_type, self)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -97,14 +100,14 @@ class Conv1dPathwise(_ConvNdPathwise):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode='zeros', prior_args=(0, 0.1)):
+                 bias=True, padding_mode='zeros', prior_type="normal"):
         kernel_size = _single(kernel_size)
         stride = _single(stride)
         padding = _single(padding)
         dilation = _single(dilation)
         super(Conv1dPathwise, self).__init__(
             in_channels, out_channels, kernel_size, stride, padding, dilation,
-            False, _single(0), groups, bias, padding_mode='zeros', prior_args=prior_args)
+            False, _single(0), groups, bias, padding_mode='zeros', prior_type=prior_type)
 
     def forward(self, input):
         self.weight_sample = self.weight_posterior.rsample()

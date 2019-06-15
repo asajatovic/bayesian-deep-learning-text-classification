@@ -7,7 +7,7 @@ from torch import lstm_cell as lstm_step
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorLaplace, PriorNormal
+from .priors import PriorLaplace, PriorNormal, prior_builder
 from .variational import BBBModule
 
 
@@ -59,31 +59,35 @@ class LSTMLayer(nn.Module):
 
 
 class LSTMPathwise(BBBModule):
-    def __init__(self, input_size, hidden_size, bias=True, prior_args=(0, 0.1)):
+    def __init__(self, input_size, hidden_size, bias=True, prior_type="normal"):
         super(LSTMPathwise, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.weight_ih_posterior = PosteriorNormal(
+            self, "weight_ih",
             Parameter(torch.Tensor(4 * hidden_size, input_size)),
-            Parameter(torch.Tensor(4 * hidden_size, input_size)),
-            self, "weight_ih")
+            Parameter(torch.Tensor(4 * hidden_size, input_size))
+        )
         self.weight_hh_posterior = PosteriorNormal(
+            self, "weight_hh",
             Parameter(torch.Tensor(4 * hidden_size, hidden_size)),
-            Parameter(torch.Tensor(4 * hidden_size, hidden_size)),
-            self, "weight_hh")
+            Parameter(torch.Tensor(4 * hidden_size, hidden_size))
+        )
         self.use_bias = bias
         if self.use_bias:
             self.bias_ih_posterior = PosteriorNormal(
+                self, "bias_ih",
                 Parameter(torch.Tensor(4 * hidden_size)),
-                Parameter(torch.Tensor(4 * hidden_size)),
-                self, "bias_ih")
+                Parameter(torch.Tensor(4 * hidden_size))
+            )
             self.bias_hh_posterior = PosteriorNormal(
+                self, "bias_hh"
                 Parameter(torch.Tensor(4 * hidden_size)),
-                Parameter(torch.Tensor(4 * hidden_size)),
-                self, "bias_hh")
+                Parameter(torch.Tensor(4 * hidden_size))
+            )
         else:
             self.register_parameter('bias', None)
-        self.prior = PriorLaplace(*prior_args, self)
+        self.prior = prior_builder(prior_type, self)
         self.reset_parameters()
 
     def reset_parameters(self):

@@ -7,6 +7,11 @@ from torch.distributions import constraints
 from torch.distributions.distribution import Distribution
 from torch.distributions.utils import _standard_normal
 
+def prior_builder(prior_type, module):
+    if prior_type.lower() == "normal":
+        return PriorNormal(module, loc=0.0, scale=0.1)
+    elif prior_type.lower() == "laplace":
+        return PriorLaplace(module, loc=0.0, scale=0.1)
 
 class PriorNormal(Distribution):
 
@@ -27,7 +32,7 @@ class PriorNormal(Distribution):
     def variance(self):
         return self.stddev.pow(2)
 
-    def __init__(self, loc, scale, module, validate_args=None):
+    def __init__(self, module, loc=0.0, scale=0.1, validate_args=None):
         self.loc = torch.tensor(float(loc))
         self.scale = torch.tensor(float(scale))
         module.register_buffer('prior_loc', self.loc)
@@ -40,7 +45,7 @@ class PriorNormal(Distribution):
             batch_shape, validate_args=validate_args)
 
     def expand(self, batch_shape, _instance=None):
-        warnings.warn('Expaning the prior distribution is not allowed!')
+        warnings.warn('Expanding the prior distribution is not allowed!')
         return self
 
     def sample(self, sample_shape=torch.Size()):
@@ -102,7 +107,7 @@ class PriorLaplace(Distribution):
     def stddev(self):
         return (2 ** 0.5) * self.scale
 
-    def __init__(self, loc, scale, module, validate_args=None):
+    def __init__(self, module, loc=0.0, scale=0.1, validate_args=None):
         self.loc = torch.tensor(float(loc))
         self.scale = torch.tensor(float(scale))
         module.register_buffer('prior_loc', self.loc)
@@ -115,7 +120,7 @@ class PriorLaplace(Distribution):
             batch_shape, validate_args=validate_args)
 
     def expand(self, batch_shape, _instance=None):
-        warnings.warn('Expaning the prior distribution is not allowed!')
+        warnings.warn('Expanding the prior distribution is not allowed!')
         return self
 
     def rsample(self, sample_shape=torch.Size()):
@@ -127,8 +132,6 @@ class PriorLaplace(Distribution):
                            device=self.loc.device) * 2 - 1
             return self.loc - self.scale * u.sign() * torch.log1p(-u.abs().clamp(min=finfo.tiny))
         u = self.loc.new(shape).uniform_(finfo.eps - 1, 1)
-        # TODO: If we ever implement tensor.nextafter, below is what we want ideally.
-        # u = self.loc.new(shape).uniform_(self.loc.nextafter(-.5, 0), .5)
         return self.loc - self.scale * u.sign() * torch.log1p(-u.abs())
 
     def log_prob(self, value):

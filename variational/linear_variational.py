@@ -5,7 +5,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from .posteriors import PosteriorNormal
-from .priors import PriorLaplace, PriorNormal
+from .priors import PriorLaplace, PriorNormal, prior_builder
 from .variational import BBBModule
 
 
@@ -13,23 +13,25 @@ class LinearPathwise(BBBModule):
 
     __constants__ = ['bias']
 
-    def __init__(self, in_features, out_features, bias=True, prior_args=(0, 0.1)):
+    def __init__(self, in_features, out_features, bias=True, prior_type="normal"):
         super(LinearPathwise, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.weight_posterior = PosteriorNormal(
+            self, "weight",
             Parameter(torch.Tensor(out_features, in_features)),
-            Parameter(torch.Tensor(out_features, in_features)),
-            self, "weight")
+            Parameter(torch.Tensor(out_features, in_features))
+        )
         self.use_bias = bias
         if self.use_bias:
             self.bias_posterior = PosteriorNormal(
+                self, "bias",
                 Parameter(torch.Tensor(out_features)),
-                Parameter(torch.Tensor(out_features)),
-                self, "bias")
+                Parameter(torch.Tensor(out_features))
+            )
         else:
             self.register_parameter('bias', None)
-        self.prior = PriorNormal(*prior_args, self)
+        self.prior = prior_builder(prior_type, self)
         self.reset_parameters()
 
     def reset_parameters(self):

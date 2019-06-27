@@ -81,7 +81,7 @@ class LSTMPathwise(BBBModule):
                 Parameter(torch.Tensor(4 * hidden_size))
             )
             self.bias_hh_posterior = PosteriorNormal(
-                self, "bias_hh"
+                self, "bias_hh",
                 Parameter(torch.Tensor(4 * hidden_size)),
                 Parameter(torch.Tensor(4 * hidden_size))
             )
@@ -116,7 +116,7 @@ class LSTMPathwise(BBBModule):
                            self.prior.log_prob(self.bias_ih_sample)).sum()
             total_loss += (self.bias_hh_posterior.log_prob(self.bias_hh_sample) -
                            self.prior.log_prob(self.bias_hh_sample)).sum()
-        return total_loss / self.seq_len
+        return total_loss
 
     def sample_weights(self):
         self.weight_ih_sample = self.weight_ih_posterior.rsample()

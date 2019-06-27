@@ -22,19 +22,19 @@ class TemporalBlock(nn.Module):
                                     stride=stride, padding=padding, dilation=dilation,
                                     prior_type=prior_type)
         self.chomp1 = Chomp1d(padding)
-        self.relu1 = nn.Softplus()
+        self.relu1 = nn.ReLU()
 
         self.conv2 = Conv1dPathwise(n_outputs, n_outputs, kernel_size,
                                     stride=stride, padding=padding, dilation=dilation,
                                     prior_type=prior_type)
         self.chomp2 = Chomp1d(padding)
-        self.relu2 = nn.Softplus()
+        self.relu2 = nn.ReLU()
 
         self.net = nn.Sequential(self.conv1, self.chomp1, self.relu1,
                                  self.conv2, self.chomp2, self.relu2)
         self.downsample = Conv1dPathwise(
             n_inputs, n_outputs, stride=1, prior_type=prior_type) if n_inputs != n_outputs else None
-        self.relu = nn.Softplus()
+        self.relu = nn.ReLU()
         # self.init_weights()
 
     def init_weights(self):
@@ -59,7 +59,7 @@ class TemporalConvNet(nn.Module):
             in_channels = num_inputs if i == 0 else num_channels[i-1]
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                     padding=(kernel_size-1) * dilation_size), prior_type = prior_type]
+                                     padding=(kernel_size-1) * dilation_size, prior_type=prior_type)]
 
         self.network = nn.Sequential(*layers)
 
@@ -162,7 +162,7 @@ class TextLSTM(BBBModule):
                    self.num_directions,
                    batch_size,
                    self.hidden_dim)
-        x = x[-1]  # final hidden state
+        x = x[-1][-1]  # final hidden state
         x = self.fc(x.squeeze())
         return self.activation(x).squeeze()
 

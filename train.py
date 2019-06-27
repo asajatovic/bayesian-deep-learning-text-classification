@@ -28,7 +28,7 @@ parser.add_argument('--lr', default=0.01, type=float, help='learning_rate')
 parser.add_argument('--model', type=str, help='tcn or lstm')
 parser.add_argument('--layers', type=int, default=2, help='num_layers')
 parser.add_argument('--kernel', type=int, default=3, help='kernel_size')
-parser.add_argument('--epochs', default=20, type=int, help='max_epochs')
+parser.add_argument('--epochs', default=30, type=int, help='max_epochs')
 parser.add_argument('--dropout', default=0.3, type=float, help='dropout_rate')
 parser.add_argument('--prior', default="normal", type=str, help='prior type (normal or laplace)')
 parser.add_argument('--dataset', type=str, help='sst, imdb or yelp')
@@ -39,6 +39,8 @@ args = parser.parse_args()
 SEED = 1234
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
+random.seed(SEED)
+rand_state = random.getstate()
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -56,7 +58,7 @@ if dataset == 'imdb':
     train_data, test_data = datasets.IMDB.splits(
         TEXT, LABEL, root='./data/imdb/')
     train_data, valid_data = train_data.split(
-        split_ratio=0.8, stratified=True, random_state=random.seed(SEED))
+        split_ratio=0.8, stratified=False, random_state=rand_state)
 
 if dataset == 'sst':
     TEXT = data.Field(fix_length=30, lower=True,
@@ -75,7 +77,7 @@ if dataset == 'yelp':
     train_data, test_data = YELP.splits(
         TEXT, LABEL, root='./data/yelp/')
     train_data, valid_data = train_data.split(
-        split_ratio=0.8, stratified=True, random_state=random.seed(SEED))
+        split_ratio=0.9, stratified=False, random_state=rand_state)
 
 TEXT.build_vocab(train_data, vectors=GloVe(
     name='6B', dim=100, cache='./glove/'))
@@ -88,6 +90,8 @@ train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits((trai
 
 total_time = time.time() - start_time
 print(f"...prepared data in {int(total_time/60)} minutes")
+TRAIN_BATCHES = len(train_iterator)
+VALID_BATCHES = len(valid_iterator)
 
 vocab_size, embedding_dim = TEXT.vocab.vectors.shape
 
@@ -102,6 +106,7 @@ dropout = args.dropout
 variational = args.variational
 if variational == 'yes':
     prior_type = args.prior
+    print(prior_type)
     if model_name == 'lstm':
         model = TextLSTMVariational(vocab_size=vocab_size,
                                     embedding_dim=embedding_dim,
@@ -153,10 +158,12 @@ if torch.cuda.device_count() > 1:
 model.to(device)
 lr = args.lr
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-criterion = nn.NLLLoss()
+train_criterion = nn.NLLLoss()
+valid_criterion = nn.NLLLoss()
 if variational is True:
     print("Using ELBO loss")
-    criterion = ELBO(model, criterion)
+    train_criterion = ELBO(model, criterion, TRAIN_BATCHES)
+    valid_criterion = ELBO(model, criterion, VALID_BATCHES)
 
 print(model)
 
@@ -166,7 +173,7 @@ def train_on_batch(engine, batch):
     optimizer.zero_grad()
     x, y = batch.text, batch.label
     y_pred = model(x)
-    loss = criterion(y_pred, y)
+    loss = train_criterion(y_pred, y)
     loss.backward()
     optimizer.step()
     return loss.item()
@@ -187,10 +194,10 @@ validation_evaluator = Engine(eval_on_batch)
 RunningAverage(output_transform=lambda x: x).attach(trainer, 'loss')
 
 Accuracy().attach(train_evaluator, 'accuracy')
-Loss(criterion).attach(train_evaluator, 'loss')
+Loss(train_criterion).attach(train_evaluator, 'loss')
 
 Accuracy().attach(validation_evaluator, 'accuracy')
-Loss(criterion).attach(validation_evaluator, 'loss')
+Loss(valid_criterion).attach(validation_evaluator, 'loss')
 
 pbar = ProgressBar(persist=True, bar_format="")
 pbar.attach(trainer, ['loss'])
@@ -229,9 +236,12 @@ def log_validation_results(engine):
         .format(engine.state.epoch, avg_accuracy, avg_loss))
     pbar.n = pbar.last_print_n = 0
 
-
-checkpointer = ModelCheckpoint(dirname='./saved_models',
-                               filename_prefix=dataset,
+filename_prefix = 'best'
+filename_prefix += '_lr' if lr==0.0001 else ""
+filename_prefix += '_drop' if dropout==0.5 else ""
+filename_prefix += '_NO_drop' if dropout==0.0 else ""
+checkpointer = ModelCheckpoint(dirname=f'./models_final/{dataset}',
+                               filename_prefix=filename_prefix,
                                # save_interval=2,
                                score_function=score_function,
                                score_name='val_acc',
@@ -243,27 +253,3 @@ validation_evaluator.add_event_handler(Events.EPOCH_COMPLETED,
 
 max_epochs = args.epochs
 trainer.run(train_iterator, max_epochs=max_epochs)
-
-
-def test(model, test_iterator, acc):
-    print("Evaluating on test set...")
-    acc.reset()
-    for batch in test_iterator:
-        model.eval()
-        with torch.no_grad():
-            x, y = batch.text, batch.label
-            y_pred = model(x)
-            output = acc._output_transform((y_pred, y))
-            acc.update(output)
-    score = acc.compute()
-    print(f"Test set score is {score}")
-
-
-for filename in os.listdir('./saved_models_normal'):
-    if f'{dataset}_{model_name}' in filename:
-        path = './saved_models_normal/' + filename
-        model = torch.load(path)
-        print(f'Loaded {filename} for inference!')
-
-acc = Accuracy()
-test(model, test_iterator, acc)
